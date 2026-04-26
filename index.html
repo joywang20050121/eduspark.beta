@@ -439,6 +439,18 @@
         .user-name-tag { font-weight: bold; color: #333; }
         .user-dept-tag { font-size: 12px; color: #888; }
         .user-points-tag { font-weight: bold; color: var(--color-red); font-size: 18px; }
+        .leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        .leaderboard-item { background: white; padding: 15px; border-radius: 15px; display: flex; align-items: center; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s ease, background-color 0.2s ease; }
+        .leaderboard-item:hover { transform: translateX(2px); }
+        .leaderboard-item-me { background: #FFF0E0; }
+        .leader-avatar-wrapper { width: 48px; display: flex; justify-content: center; align-items: center; }
+        .me-badge { color: #F08A1E; font-size: 14px; margin-left: 4px; }
+        .leaderboard-detail { display: none; background: white; border-radius: 16px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-top: 10px; }
+        .leaderboard-detail.active { display: block; }
+        .leaderboard-detail .detail-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .leaderboard-detail .detail-row img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
+        .leaderboard-detail .detail-name { font-size: 18px; font-weight: bold; color: #333; }
+        .leaderboard-detail .detail-text { color: #555; font-size: 14px; line-height: 1.6; }
 
         /* ===== 表單 ===== */
         .form-group { margin-bottom: 15px; text-align: left; }
@@ -527,7 +539,7 @@
                     <h1>教院小火花</h1>
                     <p>一起活化教育學院！</p>
                 </div>
-                <img src="587780265_17853820758583520_8125964642604352843_n.jpg"
+                <img id="home-avatar" src="587780265_17853820758583520_8125964642604352843_n.jpg"
                      alt="Logo" class="home-logo"
                      onclick="window.switchView('view-profile')">
             </div>
@@ -561,6 +573,7 @@
             <h2 class="section-title">社群排行榜</h2>
             <p class="section-desc">看看誰的火花最旺！</p>
             <div id="leaderboard-list"></div>
+            <div id="leaderboard-detail" class="leaderboard-detail"></div>
         </div>
 
         <!-- ===== 個人資料編輯 ===== -->
@@ -568,6 +581,17 @@
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回</button>
                 <h2 style="font-size: 18px;">編輯資料</h2>
+            </div>
+            <div class="form-group">
+                <label>個人頭像</label>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <img id="edit-avatar-preview" src="587780265_17853820758583520_8125964642604352843_n.jpg" alt="我的頭像" style="width:72px; height:72px; border-radius:50%; object-fit:cover; border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                    <button class="reset-score-btn" onclick="window.resetAvatar()">重置頭像</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>新增相簿中的圖案</label>
+                <div id="avatar-album" style="display:flex; gap:12px; flex-wrap:wrap;"></div>
             </div>
             <div class="form-group">
                 <label>真實姓名（不公開）</label>
@@ -748,6 +772,73 @@
     let currentUser = null;
     let userData    = null;
     let redemptionHistory = []; // 本地兌換紀錄（可改為 Firestore 持久化）
+    window.leaderboardUsers = [];
+
+    window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
+                <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="${bgColor}" />
+                    <stop offset="100%" stop-color="#ffffff" stop-opacity="0.2" />
+                </linearGradient></defs>
+                <rect width="120" height="120" rx="60" fill="url(#g)" />
+                <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Noto Serif TC, serif" fill="white" font-weight="700">${letter}</text>
+            </svg>`;
+        return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+    };
+
+    window.avatarPatterns = [
+        window.generateAvatarSvg('火', '#F18D40'),
+        window.generateAvatarSvg('學', '#5A9B7F'),
+        window.generateAvatarSvg('院', '#4A7DAA'),
+        window.generateAvatarSvg('星', '#D9646E'),
+        window.generateAvatarSvg('光', '#8D63A6')
+    ];
+
+    window.setAvatar = (avatarUrl) => {
+        if (!userData) return;
+        userData.avatar = avatarUrl;
+        const preview = document.getElementById('edit-avatar-preview');
+        if (preview) preview.src = avatarUrl;
+        const homeAvatar = document.getElementById('home-avatar');
+        if (homeAvatar) homeAvatar.src = avatarUrl;
+    };
+
+    window.resetAvatar = () => {
+        const defaultAvatar = currentUser?.photoURL || window.generateAvatarSvg((userData?.nickname || '你')[0], '#C66E52');
+        window.setAvatar(defaultAvatar);
+    };
+
+    window.renderAvatarAlbum = () => {
+        const container = document.getElementById('avatar-album');
+        if (!container) return;
+        container.innerHTML = window.avatarPatterns.map((url, index) => `
+            <img src="${url}" class="album-thumb" data-url="${url}" onclick="window.selectAvatarPattern(this.dataset.url)" style="width:56px; height:56px; border-radius:16px; object-fit:cover; cursor:pointer; border: 2px solid transparent;">
+        `).join('');
+    };
+
+    window.selectAvatarPattern = (patternUrl) => {
+        window.setAvatar(patternUrl);
+        const items = document.querySelectorAll('#avatar-album img');
+        items.forEach(img => img.style.borderColor = img.src === patternUrl ? '#F08A1E' : 'transparent');
+    };
+
+    window.showSocialDetail = (uid) => {
+        const user = window.leaderboardUsers.find(item => item.id === uid);
+        const detail = document.getElementById('leaderboard-detail');
+        if (!user || !detail) return;
+        detail.innerHTML = `
+            <div class="detail-row">
+                <img src="${user.avatar || window.generateAvatarSvg(user.nickname?.[0] || '友', '#758A93')}" alt="${user.nickname} 頭像">
+                <div>
+                    <div class="detail-name">${user.nickname}${user.id === currentUser?.uid ? ' <span class="me-badge">（我）</span>' : ''}</div>
+                    <div class="detail-text">${user.dept || '系級未填'}</div>
+                </div>
+            </div>
+            <div class="detail-text">${user.bio || '尚未留下自我介紹'}</div>
+        `;
+        detail.classList.add('active');
+    };
 
     // ── 登入狀態監聽 ────────────────────────────────────────
     onAuthStateChanged(auth, async (user) => {
@@ -758,10 +849,14 @@
             if (docSnap.exists()) {
                 userData = docSnap.data();
                 if (!userData.history) userData.history = [];
+                if (!userData.avatar) {
+                    userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
+                }
                 redemptionHistory = userData.history;
                 window.switchView('view-home');
                 document.getElementById('main-nav').style.display = 'flex';
                 window.updatePointsUI();
+                window.applyUserAvatar();
             } else {
                 window.switchView('view-setup');
             }
@@ -786,12 +881,14 @@
         const dept     = document.getElementById('setup-dept').value.trim();
         const bio      = document.getElementById('setup-bio').value.trim();
         if (!realName || !nickname) return window.showToast('請填寫姓名與暱稱');
-        userData = { realName, nickname, dept, bio, points: 0, history: [] };
+        const avatar = currentUser.photoURL || window.generateAvatarSvg(nickname[0], '#C66E52');
+        userData = { realName, nickname, dept, bio, points: 0, history: [], avatar };
         await setDoc(doc(db, "users", currentUser.uid), userData);
         redemptionHistory = [];
         window.switchView('view-home');
         document.getElementById('main-nav').style.display = 'flex';
         window.updatePointsUI();
+        window.applyUserAvatar();
     };
 
     // ── 更新個人資料 ──────────────────────────────────────────
@@ -800,10 +897,17 @@
         const nickname = document.getElementById('edit-nickname').value.trim();
         const dept     = document.getElementById('edit-dept').value.trim();
         const bio      = document.getElementById('edit-bio').value.trim();
-        await updateDoc(doc(db, "users", currentUser.uid), { realName, nickname, dept, bio });
+        await updateDoc(doc(db, "users", currentUser.uid), {
+            realName,
+            nickname,
+            dept,
+            bio,
+            avatar: userData.avatar
+        });
         userData = { ...userData, realName, nickname, dept, bio };
         window.showToast('修改成功！');
         window.switchView('view-home');
+        window.applyUserAvatar();
     };
 
     // ── 獲得積分（含 Firestore 同步）────────────────────────
@@ -905,15 +1009,23 @@
         const q    = query(collection(db, "users"), orderBy("points", "desc"));
         const snap = await getDocs(q);
         const list = document.getElementById('leaderboard-list');
+        const detail = document.getElementById('leaderboard-detail');
         list.innerHTML = '';
+        detail.classList.remove('active');
+        detail.innerHTML = '';
+        window.leaderboardUsers = [];
         let rank = 1;
         snap.forEach(d => {
             const data = d.data();
+            const isMe = d.id === currentUser?.uid;
+            const avatarUrl = data.avatar || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
+            window.leaderboardUsers.push({ id: d.id, ...data, avatar: avatarUrl });
             list.innerHTML += `
-                <div class="leaderboard-item">
+                <div class="leaderboard-item ${isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${d.id}')">
+                    <div class="leader-avatar-wrapper"><img src="${avatarUrl}" class="leader-avatar" alt="${data.nickname} 頭像"></div>
                     <div class="rank-badge">${rank++}</div>
                     <div class="user-details">
-                        <div class="user-name-tag">${data.nickname}</div>
+                        <div class="user-name-tag">${data.nickname}${isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
                         <div class="user-dept-tag">${data.dept || '教院小夥伴'}</div>
                     </div>
                     <div class="user-points-tag">${data.points}</div>
@@ -934,6 +1046,9 @@
             document.getElementById('edit-nickname').value = userData.nickname  || '';
             document.getElementById('edit-dept').value     = userData.dept      || '';
             document.getElementById('edit-bio').value      = userData.bio       || '';
+            document.getElementById('edit-avatar-preview').src = userData.avatar || window.generateAvatarSvg(userData.nickname?.[0] || '你', '#C66E52');
+            window.renderAvatarAlbum();
+            window.selectAvatarPattern(document.getElementById('edit-avatar-preview').src);
         }
     };
 
@@ -946,6 +1061,15 @@
     window.updatePointsUI = () => {
         const pts = userData ? userData.points : 0;
         document.querySelectorAll('.global-points').forEach(el => el.innerText = pts);
+        window.applyUserAvatar();
+    };
+
+    window.applyUserAvatar = () => {
+        const avatarUrl = userData?.avatar || currentUser?.photoURL || window.generateAvatarSvg(userData?.nickname?.[0] || '你', '#C66E52');
+        const homeAvatar = document.getElementById('home-avatar');
+        const profilePreview = document.getElementById('edit-avatar-preview');
+        if (homeAvatar) homeAvatar.src = avatarUrl;
+        if (profilePreview) profilePreview.src = avatarUrl;
     };
 
     window.showComingSoon = () => window.showToast('敬請期待！');

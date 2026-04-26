@@ -425,28 +425,22 @@
         .empty-history { text-align: center; color: #777; margin-top: 30px; font-style: italic; }
 
         /* ===== 排行榜 ===== */
-        .leaderboard-item {
-            background: white;
-            padding: 15px;
-            border-radius: 15px;
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .rank-badge { width: 30px; font-weight: bold; color: var(--color-red); font-size: 18px; }
-        .user-details { flex: 1; margin-left: 10px; }
+        .rank-badge { width: 28px; text-align: center; font-weight: bold; color: var(--color-red); font-size: 18px; margin-right: 12px; }
+        .leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-right: 12px; }
+        .leader-avatar-wrapper { display: flex; justify-content: center; align-items: center; }
+        .user-details { flex: 1; }
         .user-name-tag { font-weight: bold; color: #333; }
         .user-dept-tag { font-size: 12px; color: #888; }
-        .user-points-tag { font-weight: bold; color: var(--color-red); font-size: 18px; }
-        .leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
-        .leaderboard-item { background: white; padding: 15px; border-radius: 15px; display: flex; align-items: center; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s ease, background-color 0.2s ease; }
+        .user-points-tag { font-weight: bold; color: var(--color-red); font-size: 18px; margin-right: 20px; }
+        .leaderboard-item { background: white; padding: 15px; border-radius: 15px; display: flex; align-items: center; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s ease, background-color 0.2s ease; position: relative; }
         .leaderboard-item:hover { transform: translateX(2px); }
         .leaderboard-item-me { background: #FFF0E0; }
-        .leader-avatar-wrapper { width: 48px; display: flex; justify-content: center; align-items: center; }
         .me-badge { color: #F08A1E; font-size: 14px; margin-left: 4px; }
-        .leaderboard-detail { display: none; background: white; border-radius: 16px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-top: 10px; }
+        #leaderboard-detail-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1500; }
+        #leaderboard-detail-overlay.active { display: block; }
+        .leaderboard-detail { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border-radius: 20px; padding: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 1600; width: 85%; max-width: 340px; }
         .leaderboard-detail.active { display: block; }
+        .leaderboard-detail .close-btn { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666; }
         .leaderboard-detail .detail-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
         .leaderboard-detail .detail-row img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; }
         .leaderboard-detail .detail-name { font-size: 18px; font-weight: bold; color: #333; }
@@ -573,7 +567,13 @@
             <h2 class="section-title">社群排行榜</h2>
             <p class="section-desc">看看誰的火花最旺！</p>
             <div id="leaderboard-list"></div>
-            <div id="leaderboard-detail" class="leaderboard-detail"></div>
+        </div>
+
+        <!-- 詳細資訊 Modal -->
+        <div id="leaderboard-detail-overlay" onclick="window.closeSocialDetail()"></div>
+        <div class="leaderboard-detail" id="leaderboard-detail" onclick="event.stopPropagation()">
+            <button class="close-btn" onclick="window.closeSocialDetail()">×</button>
+            <div id="detail-content"></div>
         </div>
 
         <!-- ===== 個人資料編輯 ===== -->
@@ -826,8 +826,10 @@
     window.showSocialDetail = (uid) => {
         const user = window.leaderboardUsers.find(item => item.id === uid);
         const detail = document.getElementById('leaderboard-detail');
+        const overlay = document.getElementById('leaderboard-detail-overlay');
+        const content = document.getElementById('detail-content');
         if (!user || !detail) return;
-        detail.innerHTML = `
+        content.innerHTML = `
             <div class="detail-row">
                 <img src="${user.avatar || window.generateAvatarSvg(user.nickname?.[0] || '友', '#758A93')}" alt="${user.nickname} 頭像">
                 <div>
@@ -838,6 +840,14 @@
             <div class="detail-text">${user.bio || '尚未留下自我介紹'}</div>
         `;
         detail.classList.add('active');
+        overlay.classList.add('active');
+    };
+
+    window.closeSocialDetail = () => {
+        const detail = document.getElementById('leaderboard-detail');
+        const overlay = document.getElementById('leaderboard-detail-overlay');
+        detail.classList.remove('active');
+        overlay.classList.remove('active');
     };
 
     // ── 登入狀態監聽 ────────────────────────────────────────
@@ -948,6 +958,9 @@
             window.showToast('積分已經是 0 囉！');
             return;
         }
+        if (!confirm('確認是否重置積分？\n你的積分一旦重置將無法復原，不如拿去兌換獎勵吧！')) {
+            return;
+        }
         userData.points = 0;
         await updateDoc(doc(db, "users", currentUser.uid), { points: 0 });
         window.updatePointsUI();
@@ -1009,10 +1022,7 @@
         const q    = query(collection(db, "users"), orderBy("points", "desc"));
         const snap = await getDocs(q);
         const list = document.getElementById('leaderboard-list');
-        const detail = document.getElementById('leaderboard-detail');
         list.innerHTML = '';
-        detail.classList.remove('active');
-        detail.innerHTML = '';
         window.leaderboardUsers = [];
         let rank = 1;
         snap.forEach(d => {
@@ -1022,13 +1032,13 @@
             window.leaderboardUsers.push({ id: d.id, ...data, avatar: avatarUrl });
             list.innerHTML += `
                 <div class="leaderboard-item ${isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${d.id}')">
-                    <div class="leader-avatar-wrapper"><img src="${avatarUrl}" class="leader-avatar" alt="${data.nickname} 頭像"></div>
                     <div class="rank-badge">${rank++}</div>
+                    <div class="leader-avatar-wrapper"><img src="${avatarUrl}" class="leader-avatar" alt="${data.nickname} 頭像"></div>
                     <div class="user-details">
                         <div class="user-name-tag">${data.nickname}${isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
                         <div class="user-dept-tag">${data.dept || '教院小夥伴'}</div>
                     </div>
-                    <div class="user-points-tag">${data.points}</div>
+                    <div class="user-points-tag">${data.points}點</div>
                 </div>`;
         });
     };
@@ -1038,6 +1048,7 @@
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById(viewId).classList.add('active');
         document.querySelector('.view-container').scrollTop = 0;
+        window.closeSocialDetail();
 
         if (viewId === 'view-social')  window.fetchLeaderboard();
         if (viewId === 'view-history') window.renderHistory();

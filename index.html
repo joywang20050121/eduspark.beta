@@ -28,6 +28,7 @@
                 <h1 style="color: #444; letter-spacing: 2px; margin-bottom: 8px;">教院小火花</h1>
                 <p style="color: #666; margin-bottom: 40px;">活化空間，點燃熱情</p>
                 <button class="main-btn btn-start" onclick="window.loginWithGoogle()">使用 Google 帳號登入</button>
+                <button class="main-btn btn-wish" onclick="window.loginAsGuest()" style="margin-top: 15px;">訪客遊玩</button>
             </div>
         </div>
 
@@ -36,18 +37,18 @@
             <h2 style="margin-bottom: 20px; color: var(--color-red);">建立火花檔案</h2>
             <div class="form-group">
                 <label>真實姓名（僅供團隊核對，不公開）</label>
-                <input type="text" id="setup-realname" placeholder="例：王小明">
+                <input type="text" id="setup-realname" placeholder="例：王小花">
             </div>
             <div class="form-group">
                 <label>公開暱稱（會顯示在排行榜）</label>
-                <input type="text" id="setup-nickname" placeholder="例：清大小火花">
+                <input type="text" id="setup-nickname" placeholder="例：花花">
             </div>
             <div class="form-group">
-                <label>系級（選填，例：教院27）</label>
-                <input type="text" id="setup-dept" placeholder="例：人資三 / 教院27">
+                <label>系級（選填）</label>
+                <input type="text" id="setup-dept" placeholder="例：教院27">
             </div>
             <div class="form-group">
-                <label>自我介紹（50字內，選填）</label>
+                <label>自我介紹（選填，50字內）</label>
                 <textarea id="setup-bio" maxlength="50" rows="3"></textarea>
             </div>
             <button class="main-btn btn-start" onclick="window.completeSetup()">開啟我的火花之旅</button>
@@ -83,9 +84,9 @@
             </div>
 
             <div class="main-btn-group">
-                <button class="main-btn btn-start" onclick="window.switchView('view-challenge')">開始闖關</button>
+                <button class="main-btn btn-start" onclick="window.switchView('view-challenge')">開始探索</button>
                 <button class="main-btn btn-wish"  onclick="window.showComingSoon()">許願池</button>
-                <button class="main-btn btn-about" onclick="window.showComingSoon()">計畫緣起 / 團隊介紹</button>
+                <button class="main-btn btn-about" onclick="window.showComingSoon()">關於我們</button>
             </div>
         </div>
 
@@ -107,7 +108,7 @@
         <div id="view-profile" class="view">
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回</button>
-                <h2 style="font-size: 18px;">編輯資料</h2>
+                <h2 style="font-size: 18px;">編輯個人資料</h2>
             </div>
             <div class="form-group">
                 <label>個人頭像</label>

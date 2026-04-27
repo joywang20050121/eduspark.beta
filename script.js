@@ -22,12 +22,14 @@ const app      = initializeApp(firebaseConfig);
 const auth     = getAuth(app);
 const db       = getFirestore(app);
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
 
 // ========== 全域狀態 ==========
 let currentUser = null;
 let userData    = null;
 let redemptionHistory = [];
 window.leaderboardUsers = [];
+window.isGuestMode = false;
 
 // ========== 頭像與相簿工具 ==========
 window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
@@ -153,6 +155,17 @@ window.processRedirectResult = async () => {
         }
     } catch (error) {
         console.warn('Redirect login result error:', error);
+        if (window.showToast) {
+            if (error.code === 'auth/unauthorized-domain') {
+                window.showToast('此網域尚未在 Firebase 授權網域中，請檢查 Firebase 設定。');
+            } else if (error.code === 'auth/operation-not-allowed') {
+                window.showToast('Google 登入尚未在 Firebase 中啟用，請啟用 Google 登入。');
+            } else if (error.code === 'auth/account-exists-with-different-credential') {
+                window.showToast('此帳號已使用不同登入方式，請改用原本的登入方式。');
+            } else {
+                window.showToast(error.message || 'Google 登入重導回傳時發生錯誤。');
+            }
+        }
     }
     return false;
 };
@@ -235,8 +248,46 @@ window.loginWithGoogle = async () => {
 };
 
 window.logout = () => {
-    signOut(auth);
+    if (!window.isGuestMode) {
+        signOut(auth);
+    }
     redemptionHistory = [];
+    currentUser = null;
+    userData = null;
+    window.isGuestMode = false;
+    localStorage.removeItem('guest_user_data');
+    localStorage.removeItem('guest_redemption_history');
+    activateView('view-login');
+    const nav = document.getElementById('main-nav');
+    if (nav) nav.style.display = 'none';
+    if (window.showToast) window.showToast('已登出，歡迎下次再來！');
+};
+
+window.loginAsGuest = async () => {
+    window.isGuestMode = true;
+    currentUser = null;
+    const guestData = localStorage.getItem('guest_user_data');
+    if (guestData) {
+        userData = JSON.parse(guestData);
+        redemptionHistory = JSON.parse(localStorage.getItem('guest_redemption_history') || '[]');
+    } else {
+        userData = {
+            realName: '訪客',
+            nickname: '小火花遊客',
+            dept: '訪客模式',
+            bio: '這是訪客測試帳號，數據不會被保存。',
+            points: 0,
+            history: [],
+            avatar: window.generateAvatarSvg('訪', '#8D63A6')
+        };
+        redemptionHistory = [];
+    }
+    activateView('view-home');
+    const nav = document.getElementById('main-nav');
+    if (nav) nav.style.display = 'flex';
+    if (window.updatePointsUI) window.updatePointsUI();
+    if (window.applyUserAvatar) window.applyUserAvatar();
+    if (window.showToast) window.showToast('歡迎以訪客模式遊玩！數據不會被保存。');
 };
 
 // ========== 建立帳號 ==========
@@ -246,9 +297,13 @@ window.completeSetup = async () => {
     const dept     = document.getElementById('setup-dept').value.trim();
     const bio      = document.getElementById('setup-bio').value.trim();
     if (!realName || !nickname) return window.showToast('請填寫姓名與暱稱');
-    const avatar = currentUser.photoURL || window.generateAvatarSvg(nickname[0], '#C66E52');
+    const avatar = currentUser?.photoURL || window.generateAvatarSvg(nickname[0], '#C66E52');
     userData = { realName, nickname, dept, bio, points: 0, history: [], avatar };
-    await setDoc(doc(db, "users", currentUser.uid), userData);
+    if (window.isGuestMode) {
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+    } else {
+        await setDoc(doc(db, "users", currentUser.uid), userData);
+    }
     redemptionHistory = [];
     window.switchView('view-home');
     document.getElementById('main-nav').style.display = 'flex';
@@ -262,14 +317,19 @@ window.updateProfile = async () => {
     const nickname = document.getElementById('edit-nickname').value.trim();
     const dept     = document.getElementById('edit-dept').value.trim();
     const bio      = document.getElementById('edit-bio').value.trim();
-    await updateDoc(doc(db, "users", currentUser.uid), {
-        realName,
-        nickname,
-        dept,
-        bio,
-        avatar: userData.avatar
-    });
-    userData = { ...userData, realName, nickname, dept, bio };
+    if (window.isGuestMode) {
+        userData = { ...userData, realName, nickname, dept, bio };
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+    } else {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+            realName,
+            nickname,
+            dept,
+            bio,
+            avatar: userData.avatar
+        });
+        userData = { ...userData, realName, nickname, dept, bio };
+    }
     window.showToast('修改成功！');
     window.switchView('view-home');
     window.applyUserAvatar();
@@ -280,7 +340,11 @@ window.earnPoints = async (btnElement, pointsToAdd, taskName) => {
     if (btnElement.classList.contains('completed')) return;
 
     userData.points += pointsToAdd;
-    await updateDoc(doc(db, "users", currentUser.uid), { points: userData.points });
+    if (window.isGuestMode) {
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+    } else {
+        await updateDoc(doc(db, "users", currentUser.uid), { points: userData.points });
+    }
 
     if (!btnElement.dataset.originalText) {
         btnElement.dataset.originalText = btnElement.innerHTML;
@@ -317,7 +381,11 @@ window.hardResetScore = async () => {
         return;
     }
     userData.points = 0;
-    await updateDoc(doc(db, "users", currentUser.uid), { points: 0 });
+    if (window.isGuestMode) {
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+    } else {
+        await updateDoc(doc(db, "users", currentUser.uid), { points: 0 });
+    }
     window.updatePointsUI();
     window.showToast('積分已歸零重置！');
 };
@@ -331,10 +399,15 @@ window.redeemReward = async (cost, rewardName) => {
         redemptionHistory.unshift({ name: rewardName, time: timeString });
         userData.history = redemptionHistory;
 
-        await updateDoc(doc(db, "users", currentUser.uid), {
-            points: userData.points,
-            history: redemptionHistory
-        });
+        if (window.isGuestMode) {
+            localStorage.setItem('guest_user_data', JSON.stringify(userData));
+            localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
+        } else {
+            await updateDoc(doc(db, "users", currentUser.uid), {
+                points: userData.points,
+                history: redemptionHistory
+            });
+        }
 
         window.updatePointsUI();
         window.renderHistory();
@@ -367,16 +440,25 @@ window.clearHistory = async () => {
     }
     redemptionHistory = [];
     userData.history = [];
-    await updateDoc(doc(db, "users", currentUser.uid), { history: [] });
+    if (window.isGuestMode) {
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+        localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
+    } else {
+        await updateDoc(doc(db, "users", currentUser.uid), { history: [] });
+    }
     window.renderHistory();
     window.showToast('歷史紀錄已清空！');
 };
 
 // ========== 排行榜 ==========
 window.fetchLeaderboard = async () => {
+    const list = document.getElementById('leaderboard-list');
+    if (window.isGuestMode) {
+        list.innerHTML = '<p class="empty-history" style="margin-top: 30px;">訪客模式下無法查看排行榜，請登入帳號查看完整社群排行。</p>';
+        return;
+    }
     const q    = query(collection(db, "users"), orderBy("points", "desc"));
     const snap = await getDocs(q);
-    const list = document.getElementById('leaderboard-list');
     list.innerHTML = '';
     window.leaderboardUsers = [];
     let rank = 1;

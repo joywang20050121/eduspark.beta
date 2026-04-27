@@ -117,6 +117,7 @@ const activateView = (viewId) => {
 };
 
 const handleSignedInUser = async (user) => {
+    console.log('handleSignedInUser:', { uid: user.uid, email: user.email });
     currentUser = user;
     const docRef = doc(db, "users", user.uid);
     const docSnap = await getDoc(docRef);
@@ -132,7 +133,7 @@ const handleSignedInUser = async (user) => {
         if (nav) nav.style.display = 'flex';
         if (window.updatePointsUI) window.updatePointsUI();
         if (window.applyUserAvatar) window.applyUserAvatar();
-        if (window.showToast) window.showToast('登入成功！正在載入主畫面...');
+        if (window.showToast) window.showToast('登入成功！歡迎來到教院小火花！');
     } else {
         activateView('view-setup');
         const nav = document.getElementById('main-nav');
@@ -180,6 +181,7 @@ window.addEventListener('load', async () => {
 });
 
 onAuthStateChanged(auth, async (user) => {
+    console.log('onAuthStateChanged:', user ? { uid: user.uid, email: user.email } : null);
     try {
         if (user) {
             await handleSignedInUser(user);
@@ -202,16 +204,32 @@ onAuthStateChanged(auth, async (user) => {
 window.isMobileBrowser = () => /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile/.test(navigator.userAgent);
 
 window.loginWithGoogle = async () => {
+    if (window.showToast) window.showToast('Google 登入中，請稍候...');
     const useRedirect = window.isMobileBrowser();
-    if (useRedirect) {
-        await signInWithRedirect(auth, provider);
-        return;
-    }
-
     try {
+        if (useRedirect) {
+            await signInWithRedirect(auth, provider);
+            return;
+        }
         await signInWithPopup(auth, provider);
     } catch (error) {
-        console.warn('Popup login failed, fallback to redirect:', error);
+        console.error('Google login error:', error);
+        if (error.code === 'auth/cancelled-popup-request') {
+            if (window.showToast) window.showToast('登入視窗已取消，請再試一次。');
+            return;
+        }
+        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+            if (window.showToast) window.showToast('瀏覽器阻擋彈跳視窗，改為重新導向登入。');
+            await signInWithRedirect(auth, provider);
+            return;
+        }
+        if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/unauthorized-domain') {
+            if (window.showToast) {
+                window.showToast('Firebase Auth 設定未開啟或授權網域錯誤，請檢查 Firebase 控制台。');
+            }
+            return;
+        }
+        if (window.showToast) window.showToast(error.message || 'Google 登入失敗，請稍後再試。');
         await signInWithRedirect(auth, provider);
     }
 };

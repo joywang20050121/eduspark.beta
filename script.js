@@ -103,16 +103,49 @@ window.showSocialDetail = (uid) => {
 window.closeSocialDetail = () => {
     const detail = document.getElementById('leaderboard-detail');
     const overlay = document.getElementById('leaderboard-detail-overlay');
-    detail.classList.remove('active');
-    overlay.classList.remove('active');
+    if (detail) detail.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
 };
 
-// ========== 登入狀態監聽 ==========
+const activateView = (viewId) => {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const view = document.getElementById(viewId);
+    if (view) view.classList.add('active');
+    const container = document.querySelector('.view-container');
+    if (container) container.scrollTop = 0;
+    if (window.closeSocialDetail) window.closeSocialDetail();
+};
+
+const handleSignedInUser = async (user) => {
+    currentUser = user;
+    const docRef = doc(db, "users", user.uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        userData = docSnap.data();
+        if (!userData.history) userData.history = [];
+        if (!userData.avatar) {
+            userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
+        }
+        redemptionHistory = userData.history;
+        activateView('view-home');
+        const nav = document.getElementById('main-nav');
+        if (nav) nav.style.display = 'flex';
+        if (window.updatePointsUI) window.updatePointsUI();
+        if (window.applyUserAvatar) window.applyUserAvatar();
+    } else {
+        activateView('view-setup');
+        const nav = document.getElementById('main-nav');
+        if (nav) nav.style.display = 'flex';
+    }
+};
+
 window.processRedirectResult = async () => {
     try {
         const result = await getRedirectResult(auth);
-        if (result) {
-            console.log('Redirect login successful:', result.user.email);
+        const activeUser = result?.user || auth.currentUser;
+        if (activeUser) {
+            console.log('Redirect login successful:', activeUser.email);
+            await handleSignedInUser(activeUser);
         }
     } catch (error) {
         console.warn('Redirect login result error:', error);
@@ -124,33 +157,19 @@ window.processRedirectResult();
 onAuthStateChanged(auth, async (user) => {
     try {
         if (user) {
-            currentUser = user;
-            const docRef  = doc(db, "users", user.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                userData = docSnap.data();
-                if (!userData.history) userData.history = [];
-                if (!userData.avatar) {
-                    userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
-                }
-                redemptionHistory = userData.history;
-                window.switchView('view-home');
-                document.getElementById('main-nav').style.display = 'flex';
-                window.updatePointsUI();
-                window.applyUserAvatar();
-            } else {
-                window.switchView('view-setup');
-            }
+            await handleSignedInUser(user);
         } else {
-            window.switchView('view-login');
-            document.getElementById('main-nav').style.display = 'none';
+            activateView('view-login');
+            const nav = document.getElementById('main-nav');
+            if (nav) nav.style.display = 'none';
         }
     } catch (error) {
         console.error('Error in onAuthStateChanged:', error);
-        window.showToast('登入時發生錯誤，請重試');
-        window.switchView('view-login');
+        if (window.showToast) window.showToast('登入時發生錯誤，請重試');
+        activateView('view-login');
     } finally {
-        document.getElementById('loading-overlay').style.display = 'none';
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.style.display = 'none';
     }
 });
 

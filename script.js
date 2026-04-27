@@ -110,7 +110,10 @@ window.closeSocialDetail = () => {
 // ========== 登入狀態監聽 ==========
 window.processRedirectResult = async () => {
     try {
-        await getRedirectResult(auth);
+        const result = await getRedirectResult(auth);
+        if (result) {
+            console.log('Redirect login successful:', result.user.email);
+        }
     } catch (error) {
         console.warn('Redirect login result error:', error);
     }
@@ -119,29 +122,36 @@ window.processRedirectResult = async () => {
 window.processRedirectResult();
 
 onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        currentUser = user;
-        const docRef  = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            userData = docSnap.data();
-            if (!userData.history) userData.history = [];
-            if (!userData.avatar) {
-                userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
+    try {
+        if (user) {
+            currentUser = user;
+            const docRef  = doc(db, "users", user.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                userData = docSnap.data();
+                if (!userData.history) userData.history = [];
+                if (!userData.avatar) {
+                    userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
+                }
+                redemptionHistory = userData.history;
+                window.switchView('view-home');
+                document.getElementById('main-nav').style.display = 'flex';
+                window.updatePointsUI();
+                window.applyUserAvatar();
+            } else {
+                window.switchView('view-setup');
             }
-            redemptionHistory = userData.history;
-            window.switchView('view-home');
-            document.getElementById('main-nav').style.display = 'flex';
-            window.updatePointsUI();
-            window.applyUserAvatar();
         } else {
-            window.switchView('view-setup');
+            window.switchView('view-login');
+            document.getElementById('main-nav').style.display = 'none';
         }
-    } else {
+    } catch (error) {
+        console.error('Error in onAuthStateChanged:', error);
+        window.showToast('登入時發生錯誤，請重試');
         window.switchView('view-login');
-        document.getElementById('main-nav').style.display = 'none';
+    } finally {
+        document.getElementById('loading-overlay').style.display = 'none';
     }
-    document.getElementById('loading-overlay').style.display = 'none';
 });
 
 // ========== 帳號相關 ==========

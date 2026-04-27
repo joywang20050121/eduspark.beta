@@ -132,10 +132,12 @@ const handleSignedInUser = async (user) => {
         if (nav) nav.style.display = 'flex';
         if (window.updatePointsUI) window.updatePointsUI();
         if (window.applyUserAvatar) window.applyUserAvatar();
+        if (window.showToast) window.showToast('登入成功！正在載入主畫面...');
     } else {
         activateView('view-setup');
         const nav = document.getElementById('main-nav');
         if (nav) nav.style.display = 'flex';
+        if (window.showToast) window.showToast('登入成功！請完成個人資料設定。');
     }
 };
 
@@ -146,13 +148,36 @@ window.processRedirectResult = async () => {
         if (activeUser) {
             console.log('Redirect login successful:', activeUser.email);
             await handleSignedInUser(activeUser);
+            return true;
         }
     } catch (error) {
         console.warn('Redirect login result error:', error);
     }
+    return false;
 };
 
-window.processRedirectResult();
+const checkHostingEnvironment = () => {
+    const protocol = window.location.protocol;
+    if (protocol === 'file:') {
+        if (window.showToast) {
+            window.showToast('請改用 http://localhost 或正式網址開啟，不要直接以 file:// 方式開啟。');
+        }
+        console.warn('App loaded via file:// protocol. Firebase redirect authentication will not work properly.');
+    } else if (!protocol.startsWith('http')) {
+        if (window.showToast) {
+            window.showToast('請使用瀏覽器透過 HTTP/HTTPS 打開此應用程式。');
+        }
+        console.warn('App loaded via unsupported protocol:', protocol);
+    }
+};
+
+window.addEventListener('load', async () => {
+    checkHostingEnvironment();
+    const handled = await window.processRedirectResult();
+    if (!handled && auth.currentUser) {
+        await handleSignedInUser(auth.currentUser);
+    }
+});
 
 onAuthStateChanged(auth, async (user) => {
     try {

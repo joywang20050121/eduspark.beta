@@ -22,6 +22,7 @@ const app      = initializeApp(firebaseConfig);
 const auth     = getAuth(app);
 const db       = getFirestore(app);
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: 'select_account' });
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -119,7 +120,12 @@ const activateView = (viewId) => {
 
 // --- 處理行動裝置 Redirect 結果 ---
 // 這一行非常重要，它會捕捉從 Google 頁面跳轉回來的登入資訊
-getRedirectResult(auth).catch((error) => {
+getRedirectResult(auth).then((result) => {
+    if (result?.user) {
+        console.log('Redirect login successful:', result.user.email);
+        // onAuthStateChanged 會處理後續
+    }
+}).catch((error) => {
     console.error("重新導向登入出錯:", error);
     if (window.showToast) window.showToast("登入連線中斷，請再試一次");
 });

@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
-    getAuth, signInWithPopup, GoogleAuthProvider,
-    onAuthStateChanged, signOut
+    getAuth, signInWithPopup, signInWithRedirect, getRedirectResult,
+    GoogleAuthProvider, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import {
     getFirestore, doc, setDoc, getDoc, updateDoc,
@@ -108,6 +108,16 @@ window.closeSocialDetail = () => {
 };
 
 // ========== 登入狀態監聽 ==========
+window.processRedirectResult = async () => {
+    try {
+        await getRedirectResult(auth);
+    } catch (error) {
+        console.warn('Redirect login result error:', error);
+    }
+};
+
+window.processRedirectResult();
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -135,7 +145,23 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ========== 帳號相關 ==========
-window.loginWithGoogle = () => signInWithPopup(auth, provider);
+window.isMobileBrowser = () => /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile/.test(navigator.userAgent);
+
+window.loginWithGoogle = async () => {
+    const useRedirect = window.isMobileBrowser();
+    if (useRedirect) {
+        await signInWithRedirect(auth, provider);
+        return;
+    }
+
+    try {
+        await signInWithPopup(auth, provider);
+    } catch (error) {
+        console.warn('Popup login failed, fallback to redirect:', error);
+        await signInWithRedirect(auth, provider);
+    }
+};
+
 window.logout = () => {
     signOut(auth);
     redemptionHistory = [];

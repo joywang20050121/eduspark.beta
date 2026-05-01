@@ -128,6 +128,11 @@ const activateView = (viewId) => {
     }
 };
 
+const setMainNavVisible = (visible) => {
+    const nav = document.getElementById('main-nav');
+    if (nav) nav.style.display = visible ? 'flex' : 'none';
+};
+
 const handleAuthenticatedUser = async (user) => {
     if (!user) return;
     if (currentUser?.uid === user.uid && userData) return;
@@ -135,20 +140,22 @@ const handleAuthenticatedUser = async (user) => {
     try {
         const snap = await getDoc(doc(db, "users", user.uid));
         if (snap.exists()) {
-            userData = snap.data();
-            if (!userData.history) userData.history = [];
-            if (!userData.avatar) {
-                userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
-            }
+            const data = snap.data();
+            userData = {
+                ...data,
+                points: typeof data.points === 'number' ? data.points : 0,
+                history: Array.isArray(data.history) ? data.history : [],
+                avatar: data.avatar || user.photoURL || window.generateAvatarSvg((data.nickname || '你')[0], '#C66E52')
+            };
             redemptionHistory = userData.history;
             activateView('view-home');
-            document.getElementById('main-nav').style.display = 'flex';
+            setMainNavVisible(true);
             if (window.updatePointsUI) window.updatePointsUI();
             if (window.applyUserAvatar) window.applyUserAvatar();
         } else {
             userData = null;
             activateView('view-setup');
-            document.getElementById('main-nav').style.display = 'flex';
+            setMainNavVisible(true);
         }
     } catch (err) {
         console.error('登入後讀取資料失敗:', err);
@@ -180,7 +187,7 @@ onAuthStateChanged(auth, async (user) => {
         } else {
             console.log('No authenticated user, showing login view');
             activateView('view-login');
-            document.getElementById('main-nav').style.display = 'none';
+            setMainNavVisible(false);
         }
     } catch (err) {
         console.error("初始化錯誤:", err);
@@ -227,8 +234,7 @@ window.logout = () => {
     localStorage.removeItem('guest_user_data');
     localStorage.removeItem('guest_redemption_history');
     activateView('view-login');
-    const nav = document.getElementById('main-nav');
-    if (nav) nav.style.display = 'none';
+    setMainNavVisible(false);
     if (window.showToast) window.showToast('已登出，歡迎下次再來！');
 };
 
@@ -252,32 +258,10 @@ window.loginAsGuest = async () => {
         redemptionHistory = [];
     }
     activateView('view-home');
-    const nav = document.getElementById('main-nav');
-    if (nav) nav.style.display = 'flex';
+    setMainNavVisible(true);
     if (window.updatePointsUI) window.updatePointsUI();
     if (window.applyUserAvatar) window.applyUserAvatar();
     if (window.showToast) window.showToast('歡迎以訪客模式遊玩！數據不會被保存。');
-};
-
-// ========== 建立帳號 ==========
-window.completeSetup = async () => {
-    const realName = document.getElementById('setup-realname').value.trim();
-    const nickname = document.getElementById('setup-nickname').value.trim();
-    const dept     = document.getElementById('setup-dept').value.trim();
-    const bio      = document.getElementById('setup-bio').value.trim();
-    if (!realName || !nickname) return window.showToast('請填寫姓名與暱稱');
-    const avatar = currentUser?.photoURL || window.generateAvatarSvg(nickname[0], '#C66E52');
-    userData = { realName, nickname, dept, bio, points: 0, history: [], avatar };
-    if (window.isGuestMode) {
-        localStorage.setItem('guest_user_data', JSON.stringify(userData));
-    } else {
-        await setDoc(doc(db, "users", currentUser.uid), userData);
-    }
-    redemptionHistory = [];
-    window.switchView('view-home');
-    document.getElementById('main-nav').style.display = 'flex';
-    window.updatePointsUI();
-    window.applyUserAvatar();
 };
 
 // ========== 更新個人資料 ==========

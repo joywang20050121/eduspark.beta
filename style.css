@@ -208,10 +208,11 @@ button:active { transform: scale(0.97) !important; }
 .spark-bg:hover { transform: scale(1.08); }
 
 .huge-score {
-    font-size: 55px;
+    font-size: 42px;
     font-weight: bold;
     color: var(--color-red);
     margin-top: 35px;
+    line-height: 1;
 }
 
 /* 積分操作按鈕群組 */
@@ -301,6 +302,27 @@ button:active { transform: scale(0.97) !important; }
     gap: 8px;
 }
 
+.history-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.history-heading .section-title {
+    margin-bottom: 0;
+    flex: 1;
+}
+
+.history-summary {
+    color: #555;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+    margin-top: 2px;
+}
+
 .reset-btn {
     background-color: transparent;
     color: #555;
@@ -353,6 +375,29 @@ button:active { transform: scale(0.97) !important; }
     margin-bottom: 25px;
     line-height: 1.6;
     font-weight: bold;
+}
+
+.leaderboard-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.leaderboard-tab {
+    background: white;
+    color: #444;
+    border: 1px solid #ccc;
+    border-radius: 18px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.leaderboard-tab.active {
+    background: var(--color-red);
+    color: white;
+    border-color: var(--color-red);
 }
 
 /* ===== 類別按鈕 ===== */
@@ -442,6 +487,37 @@ button:active { transform: scale(0.97) !important; }
 .history-time { color: #888; font-size: 12px; }
 .empty-history { text-align: center; color: #777; margin-top: 30px; font-style: italic; }
 
+.guest-ranking-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.guest-ranking-message .empty-history {
+    margin: 16px 0;
+    font-style: normal;
+    line-height: 1.8;
+}
+
+.guest-login-btn {
+    background-color: var(--color-red);
+    color: white;
+    border: none;
+    border-radius: 18px;
+    padding: 12px 18px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    width: auto;
+    min-width: 180px;
+}
+
+.guest-login-btn:hover {
+    opacity: 0.95;
+}
+
 /* ===== 排行榜 ===== */
 .rank-badge { width: 28px; text-align: center; font-weight: bold; color: var(--color-red); font-size: 18px; margin-right: 12px; }
 .leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-right: 12px; }
@@ -450,6 +526,17 @@ button:active { transform: scale(0.97) !important; }
 .user-name-tag { font-weight: bold; color: #333; }
 .user-dept-tag { font-size: 12px; color: #888; }
 .user-points-tag { font-weight: bold; color: var(--color-red); font-size: 18px; margin-right: 20px; }
+.leaderboard-points-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.user-redeemed-tag {
+    color: #5C766D;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+}
 .leaderboard-item { background: white; padding: 15px; border-radius: 15px; display: flex; align-items: center; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s ease, background-color 0.2s ease; position: relative; }
 .leaderboard-item:hover { transform: translateX(2px); }
 .leaderboard-item-me { background: #FFF0E0; }

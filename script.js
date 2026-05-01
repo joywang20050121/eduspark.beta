@@ -49,6 +49,7 @@ let userData    = null;
 let redemptionHistory = [];
 window.leaderboardUsers = [];
 window.isGuestMode = false;
+window.leaderboardMode = 'current';
 
 // ========== 頭像與相簿工具 ==========
 window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
@@ -60,7 +61,7 @@ window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
-window.avatarPalette = ['#a24a51', '#C66E52', '#c1a84b', '#4e847e', '#44687f', '#786690', '#cc98a0'];
+window.avatarPalette = ['#9d3737', '#C66E52', '#ceb55a', '#49726e', '#39596d', '#725b85', '#cc98a0'];
 window.defaultAvatarBackgroundColor = '#C66E52';
 window.currentAvatarSelection = { letter: '火', color: window.defaultAvatarBackgroundColor };
 
@@ -71,6 +72,34 @@ window.setAvatar = (avatarUrl) => {
     if (preview) preview.src = avatarUrl;
     const homeAvatar = document.getElementById('home-avatar');
     if (homeAvatar) homeAvatar.src = avatarUrl;
+};
+
+window.parseRedeemCost = (historyItem) => {
+    if (typeof historyItem.cost === 'number') return historyItem.cost;
+    if (typeof historyItem.cost === 'string' && historyItem.cost.trim() !== '') {
+        return Number(historyItem.cost) || 0;
+    }
+    return 0;
+};
+
+window.getRedeemedPoints = (history = []) => {
+    return history.reduce((total, item) => total + (window.parseRedeemCost(item) || 0), 0);
+};
+
+window.updateHistorySummary = () => {
+    const summary = document.getElementById('history-summary');
+    if (!summary) return;
+    const total = window.getRedeemedPoints(redemptionHistory);
+    summary.innerText = total > 0 ? `目前累積兌換點數：-${total}點` : '目前累積兌換點數：0點';
+};
+
+window.switchLeaderboardMode = (mode) => {
+    if (!['current', 'total'].includes(mode)) return;
+    window.leaderboardMode = mode;
+    document.querySelectorAll('.leaderboard-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === mode);
+    });
+    window.fetchLeaderboard();
 };
 
 window.getDefaultAvatarSelection = (nickname = '') => {
@@ -455,7 +484,7 @@ window.redeemReward = async (cost, rewardName) => {
         userData.points -= cost;
         const now = new Date();
         const timeString = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        redemptionHistory.unshift({ name: rewardName, time: timeString });
+        redemptionHistory.unshift({ name: rewardName, time: timeString, cost });
         userData.history = redemptionHistory;
 
         if (window.isGuestMode) {
@@ -482,14 +511,20 @@ window.renderHistory = () => {
     const container = document.getElementById('history-container');
     if (redemptionHistory.length === 0) {
         container.innerHTML = "<p class='empty-history'>尚無兌換紀錄，快去闖關累積點數吧！</p>";
+        window.updateHistorySummary();
         return;
     }
-    container.innerHTML = redemptionHistory.map(item => `
-        <div class="history-item">
-            <span class="history-name">${item.name}</span>
-            <span class="history-time">${item.time}</span>
-        </div>
-    `).join('');
+    container.innerHTML = redemptionHistory.map(item => {
+        const cost = window.parseRedeemCost(item);
+        const costLabel = cost > 0 ? `（-${cost}點）` : '';
+        return `
+            <div class="history-item">
+                <span class="history-name">${item.name}${costLabel}</span>
+                <span class="history-time">${item.time}</span>
+            </div>
+        `;
+    }).join('');
+    window.updateHistorySummary();
 };
 
 window.clearHistory = async () => {
@@ -513,28 +548,49 @@ window.clearHistory = async () => {
 window.fetchLeaderboard = async () => {
     const list = document.getElementById('leaderboard-list');
     if (window.isGuestMode) {
-        list.innerHTML = '<p class="empty-history" style="margin-top: 30px;">訪客模式下無法查看排行榜，請登入帳號查看完整社群排行。</p>';
+        list.innerHTML = `
+            <div class="guest-ranking-message">
+                <p class="empty-history">訪客模式下無法查看排行榜，<br>請登入帳號查看完整社群排行。</p>
+                <button class="guest-login-btn" onclick="window.loginWithGoogle()">使用 Google 帳號登入</button>
+            </div>
+        `;
         return;
     }
-    const q    = query(collection(db, "users"), orderBy("points", "desc"));
-    const snap = await getDocs(q);
-    list.innerHTML = '';
-    window.leaderboardUsers = [];
-    let rank = 1;
+    const snap = await getDocs(query(collection(db, "users")));
+    const users = [];
     snap.forEach(d => {
         const data = d.data();
         const isMe = d.id === currentUser?.uid;
         const avatarUrl = data.avatar || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
-        window.leaderboardUsers.push({ id: d.id, ...data, avatar: avatarUrl });
+        const historyData = Array.isArray(data.history) ? data.history : [];
+        const redeemed = window.getRedeemedPoints(historyData);
+        const totalPoints = Number(data.points || 0) + redeemed;
+        users.push({ id: d.id, ...data, avatar: avatarUrl, isMe, redeemed, totalPoints });
+    });
+
+    if (window.leaderboardMode === 'current') {
+        users.sort((a, b) => (Number(b.points || 0) - Number(a.points || 0)));
+    } else {
+        users.sort((a, b) => (Number(b.totalPoints || 0) - Number(a.totalPoints || 0)));
+    }
+
+    list.innerHTML = '';
+    let rank = 1;
+    users.forEach(user => {
+        const pointsToShow = window.leaderboardMode === 'total' ? user.totalPoints : Number(user.points || 0);
+        const redeemedLabel = window.leaderboardMode === 'total' && user.redeemed > 0 ? `<span class="user-redeemed-tag">-${user.redeemed}點</span>` : '';
         list.innerHTML += `
-            <div class="leaderboard-item ${isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${d.id}')">
+            <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${user.id}')">
                 <div class="rank-badge">${rank++}</div>
-                <div class="leader-avatar-wrapper"><img src="${avatarUrl}" class="leader-avatar" alt="${data.nickname} 頭像"></div>
+                <div class="leader-avatar-wrapper"><img src="${user.avatar}" class="leader-avatar" alt="${user.nickname} 頭像"></div>
                 <div class="user-details">
-                    <div class="user-name-tag">${data.nickname}${isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
-                    <div class="user-dept-tag">${data.dept || '教院小夥伴'}</div>
+                    <div class="user-name-tag">${user.nickname}${user.isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
+                    <div class="user-dept-tag">${user.dept || '教院小夥伴'}</div>
                 </div>
-                <div class="user-points-tag">${data.points}點</div>
+                <div class="leaderboard-points-group">
+                    ${redeemedLabel}
+                    <div class="user-points-tag">${pointsToShow}點</div>
+                </div>
             </div>`;
     });
 };

@@ -95,6 +95,10 @@
         <div id="view-social" class="view">
             <h2 class="section-title">社群排行榜</h2>
             <p class="section-desc">看看誰的火花最旺！</p>
+            <div class="leaderboard-tabs" id="leaderboard-tabs">
+                <button class="leaderboard-tab active" data-mode="current" onclick="window.switchLeaderboardMode('current')">當前積分排名</button>
+                <button class="leaderboard-tab" data-mode="total" onclick="window.switchLeaderboardMode('total')">總積分排名</button>
+            </div>
             <div id="leaderboard-list"></div>
         </div>
 
@@ -255,7 +259,10 @@
                     </button>
                 </div>
             </div>
-            <h2 class="section-title">歷史紀錄</h2>
+            <div class="history-heading">
+                <h2 class="section-title">歷史紀錄</h2>
+                <div class="history-summary" id="history-summary">目前累積兌換點數：0點</div>
+            </div>
             <p class="section-desc">這是您過去所有的獎勵兌換明細：</p>
             <div id="history-container">
                 <p class="empty-history">尚無兌換紀錄，快去闖關累積點數吧！</p>

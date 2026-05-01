@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
     getAuth, signInWithRedirect, getRedirectResult,
-    GoogleAuthProvider, onAuthStateChanged, signOut
+    GoogleAuthProvider, onAuthStateChanged, signOut,
+    setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import {
     getFirestore, doc, setDoc, getDoc, updateDoc,
@@ -179,7 +180,13 @@ onAuthStateChanged(auth, async (user) => {
 
 window.loginWithGoogle = () => {
     document.getElementById('loading-overlay').style.display = 'flex';
-    signInWithRedirect(auth, provider);
+    setPersistence(auth, browserLocalPersistence)
+        .then(() => signInWithRedirect(auth, provider))
+        .catch((error) => {
+            console.error('設定登入持久性失敗：', error);
+            document.getElementById('loading-overlay').style.display = 'none';
+            window.showToast('登入初始化失敗，請稍候再試。');
+        });
 };
 
 window.logout = () => {
@@ -459,8 +466,19 @@ window.applyUserAvatar = () => {
 window.showComingSoon = () => window.showToast('敬請期待！');
 
 window.showTeamIntro = () => {
-    alert('本計畫由教育學院學士班27級王巧樂、28級李好等人發起，目的是讓教育學院的大家可以有更多交流的機會！歡迎多多分享給妳身邊的朋友們，讓大家一起成為教育學院中的小火花吧！🔥');
+    const overlay = document.getElementById('team-intro-overlay');
+    const modal = document.getElementById('team-intro-modal');
+    if (overlay) overlay.classList.add('active');
+    if (modal) modal.classList.add('active');
 };
+
+window.closeTeamIntro = () => {
+    const overlay = document.getElementById('team-intro-overlay');
+    const modal = document.getElementById('team-intro-modal');
+    if (overlay) overlay.classList.remove('active');
+    if (modal) modal.classList.remove('active');
+};
+
 
 // ========== Toast 通知 ==========
 let toastTimeout;

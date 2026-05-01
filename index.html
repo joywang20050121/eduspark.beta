@@ -58,11 +58,14 @@
         <div id="view-home" class="view">
             <div class="home-header">
                 <div class="home-title">
-                    <h1>教院小火花</h1>
                     <img src="587780265_17853820758583520_8125964642604352843_n.jpg"
-                         style="width: 60px; border-radius: 50%; margin-left: 10px; border: 2px solid white; cursor: pointer;"
-                         onclick="window.showTeamIntro()" alt="執行團隊介紹">
-                    <p>一起活化教育學院！</p>
+                         alt="執行團隊介紹"
+                         class="home-title-avatar"
+                         onclick="window.showTeamIntro()">
+                    <div class="home-title-text">
+                        <h1>教院小火花</h1>
+                        <p>一起活化教育學院！</p>
+                    </div>
                 </div>
                 <img id="home-avatar" src="587780265_17853820758583520_8125964642604352843_n.jpg"
                      alt="Logo" class="home-logo"
@@ -85,7 +88,6 @@
             <div class="main-btn-group">
                 <button class="main-btn btn-start" onclick="window.switchView('view-challenge')">開始探索</button>
                 <button class="main-btn btn-wish"  onclick="window.showComingSoon()">許願池</button>
-                <button class="main-btn btn-about" onclick="window.showComingSoon()">關於我們</button>
             </div>
         </div>
 
@@ -97,10 +99,17 @@
         </div>
 
         <!-- 詳細資訊 Modal -->
-        <div id="leaderboard-detail-overlay" onclick="window.closeSocialDetail()"></div>
+        <div id="leaderboard-detail-overlay" class="detail-overlay" onclick="window.closeSocialDetail()"></div>
         <div class="leaderboard-detail" id="leaderboard-detail" onclick="event.stopPropagation()">
             <button class="close-btn" onclick="window.closeSocialDetail()">×</button>
             <div id="detail-content"></div>
+        </div>
+
+        <div id="team-intro-overlay" class="detail-overlay" onclick="window.closeTeamIntro()"></div>
+        <div class="team-intro-modal" id="team-intro-modal" onclick="event.stopPropagation()">
+            <button class="close-btn" onclick="window.closeTeamIntro()">×</button>
+            <h2 class="section-title">執行團隊介紹</h2>
+            <p class="team-intro-text">本計畫由教育學院學士班27級王巧樂、28級李好等人發起，目的是讓教育學院的大家可以有更多交流的機會！歡迎多多分享給妳身邊的朋友們，讓大家一起成為教育學院中的小火花吧！🔥</p>
         </div>
 
         <!-- ===== 個人資料編輯 ===== -->
@@ -252,13 +261,6 @@
 
     <!-- ===== 底部導覽列 ===== -->
     <nav class="bottom-nav" id="main-nav">
-        <div class="nav-item active" onclick="window.navTo('view-home', this)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            <span>首頁</span>
-        </div>
         <div class="nav-item" onclick="window.navTo('view-reward', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="9" cy="21" r="1"/>
@@ -266,6 +268,13 @@
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
             </svg>
             <span>商店</span>
+        </div>
+        <div class="nav-item active" onclick="window.navTo('view-home', this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span>首頁</span>
         </div>
         <div class="nav-item" onclick="window.navTo('view-social', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

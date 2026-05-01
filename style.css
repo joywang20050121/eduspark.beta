@@ -128,13 +128,14 @@ button:active { transform: scale(0.97) !important; }
 
 .home-title {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
 }
 
 .home-title-avatar {
     width: 60px;
     height: 60px;
+    flex-shrink: 0;
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid white;

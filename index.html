@@ -261,7 +261,7 @@
 
     <!-- ===== 底部導覽列 ===== -->
     <nav class="bottom-nav" id="main-nav">
-        <div class="nav-item" onclick="window.navTo('view-reward', this)">
+        <div class="nav-item" data-view="view-reward" onclick="window.navTo('view-reward', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="9" cy="21" r="1"/>
                 <circle cx="20" cy="21" r="1"/>
@@ -269,14 +269,14 @@
             </svg>
             <span>商店</span>
         </div>
-        <div class="nav-item active" onclick="window.navTo('view-home', this)">
+        <div class="nav-item active" data-view="view-home" onclick="window.navTo('view-home', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                 <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
             <span>首頁</span>
         </div>
-        <div class="nav-item" onclick="window.navTo('view-social', this)">
+        <div class="nav-item" data-view="view-social" onclick="window.navTo('view-social', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>

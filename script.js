@@ -110,6 +110,12 @@ window.closeSocialDetail = () => {
     if (overlay) overlay.classList.remove('active');
 };
 
+const setActiveNavItem = (viewId) => {
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+    const target = document.querySelector(`.nav-item[data-view="${viewId}"]`);
+    if (target) target.classList.add('active');
+};
+
 const activateView = (viewId) => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const view = document.getElementById(viewId);
@@ -117,6 +123,9 @@ const activateView = (viewId) => {
     const container = document.querySelector('.view-container');
     if (container) container.scrollTop = 0;
     if (window.closeSocialDetail) window.closeSocialDetail();
+    if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
+        setActiveNavItem(viewId);
+    }
 };
 
 // --- 處理行動裝置 Redirect 結果 ---
@@ -423,11 +432,20 @@ window.fetchLeaderboard = async () => {
 };
 
 // ========== 視圖切換 ==========
+window.navTo = (viewId, el) => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+    window.switchView(viewId);
+};
+
 window.switchView = (viewId) => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(viewId).classList.add('active');
     document.querySelector('.view-container').scrollTop = 0;
     window.closeSocialDetail();
+    if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
+        setActiveNavItem(viewId);
+    }
 
     if (viewId === 'view-social')  window.fetchLeaderboard();
     if (viewId === 'view-history') window.renderHistory();
@@ -440,12 +458,6 @@ window.switchView = (viewId) => {
         window.renderAvatarAlbum();
         window.selectAvatarPattern(document.getElementById('edit-avatar-preview').src);
     }
-};
-
-window.navTo = (viewId, el) => {
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    el.classList.add('active');
-    window.switchView(viewId);
 };
 
 // ========== UI 更新 ==========

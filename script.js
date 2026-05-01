@@ -25,6 +25,24 @@ const db       = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
+const redirectStateKey = 'firebase_auth_redirect_url';
+const saveRedirectState = () => {
+    sessionStorage.setItem(redirectStateKey, window.location.href);
+};
+const clearRedirectState = () => {
+    sessionStorage.removeItem(redirectStateKey);
+};
+const restoreRedirectState = () => {
+    const saved = sessionStorage.getItem(redirectStateKey);
+    if (!saved) return false;
+    clearRedirectState();
+    if (saved !== window.location.href) {
+        window.location.replace(saved);
+        return true;
+    }
+    return false;
+};
+
 // ========== 全域狀態 ==========
 let currentUser = null;
 let userData    = null;
@@ -171,8 +189,10 @@ getRedirectResult(auth).then(async (result) => {
         console.log('Redirect login successful:', result.user.email);
         await handleAuthenticatedUser(result.user);
     }
+    restoreRedirectState();
 }).catch((error) => {
     console.error("重新導向登入出錯:", error);
+    clearRedirectState();
     if (window.showToast) window.showToast("登入連線中斷，請再試一次");
 });
 
@@ -204,10 +224,12 @@ onAuthStateChanged(auth, async (user) => {
 window.loginWithGoogle = async () => {
     const loading = document.getElementById('loading-overlay');
     if (loading) loading.style.display = 'flex';
+    saveRedirectState();
     try {
         await setPersistence(auth, browserLocalPersistence);
         const result = await signInWithPopup(auth, provider);
         if (result?.user) {
+            clearRedirectState();
             await handleAuthenticatedUser(result.user);
         }
     } catch (error) {

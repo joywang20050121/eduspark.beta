@@ -65,11 +65,11 @@ window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
 };
 
 window.avatarPatterns = [
-    window.generateAvatarSvg('火', '#F18D40'),
-    window.generateAvatarSvg('學', '#5A9B7F'),
-    window.generateAvatarSvg('院', '#4A7DAA'),
-    window.generateAvatarSvg('星', '#D9646E'),
-    window.generateAvatarSvg('光', '#8D63A6')
+    window.generateAvatarSvg('馬', '#4f5cad'),
+    window.generateAvatarSvg('羊', '#5A9B7F'),
+    window.generateAvatarSvg('猴', '#b8753b'),
+    window.generateAvatarSvg('雞', '#D9646E'),
+    window.generateAvatarSvg('狗', '#bb9c62')
 ];
 
 window.setAvatar = (avatarUrl) => {

@@ -137,9 +137,18 @@ button:active { transform: scale(0.97) !important; }
     height: 60px;
     flex-shrink: 0;
     border-radius: 50%;
+    overflow: hidden;
     object-fit: cover;
     border: 2px solid white;
     cursor: pointer;
+    display: block;
+}
+
+.home-title-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 6px;
 }
 
 .home-title-text h1 {
@@ -147,13 +156,14 @@ button:active { transform: scale(0.97) !important; }
     font-size: 28px;
     font-weight: bold;
     letter-spacing: 2px;
-    margin-bottom: 5px;
+    margin: 0;
 }
 
 .home-title-text p {
     color: #666;
     font-size: 14px;
     letter-spacing: 1px;
+    margin: 0;
 }
 
 .home-logo {

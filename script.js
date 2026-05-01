@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
-    getAuth, signInWithRedirect, getRedirectResult,
+    getAuth, signInWithRedirect, signInWithPopup, getRedirectResult,
     GoogleAuthProvider, onAuthStateChanged, signOut,
     setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
@@ -128,12 +128,41 @@ const activateView = (viewId) => {
     }
 };
 
+const handleAuthenticatedUser = async (user) => {
+    if (!user) return;
+    if (currentUser?.uid === user.uid && userData) return;
+    currentUser = user;
+    try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+        if (snap.exists()) {
+            userData = snap.data();
+            if (!userData.history) userData.history = [];
+            if (!userData.avatar) {
+                userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
+            }
+            redemptionHistory = userData.history;
+            activateView('view-home');
+            document.getElementById('main-nav').style.display = 'flex';
+            if (window.updatePointsUI) window.updatePointsUI();
+            if (window.applyUserAvatar) window.applyUserAvatar();
+        } else {
+            userData = null;
+            activateView('view-setup');
+            document.getElementById('main-nav').style.display = 'flex';
+        }
+    } catch (err) {
+        console.error('登入後讀取資料失敗:', err);
+        if (window.showToast) window.showToast('登入成功，但讀取資料失敗，請稍後重整');
+        activateView('view-login');
+    }
+};
+
 // --- 處理行動裝置 Redirect 結果 ---
 // 這一行非常重要，它會捕捉從 Google 頁面跳轉回來的登入資訊
-getRedirectResult(auth).then((result) => {
+getRedirectResult(auth).then(async (result) => {
     if (result?.user) {
         console.log('Redirect login successful:', result.user.email);
-        // onAuthStateChanged 會處理後續
+        await handleAuthenticatedUser(result.user);
     }
 }).catch((error) => {
     console.error("重新導向登入出錯:", error);
@@ -146,32 +175,10 @@ onAuthStateChanged(auth, async (user) => {
     console.log('onAuthStateChanged triggered:', user ? `User: ${user.uid}, Email: ${user.email}` : 'No user');
     try {
         if (user) {
-            console.log('User authenticated, fetching data from Firestore...');
-            currentUser = user;
-            const snap = await getDoc(doc(db, "users", user.uid));
-            console.log('Firestore query result:', snap.exists() ? 'Data exists' : 'No data found');
-            
-            if (snap.exists()) {
-                userData = snap.data();
-                if (!userData.history) userData.history = [];
-                if (!userData.avatar) {
-                    userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
-                }
-                redemptionHistory = userData.history;
-                console.log('Entering home view');
-                activateView('view-home');
-                document.getElementById('main-nav').style.display = 'flex';
-                if (window.updatePointsUI) window.updatePointsUI();
-                if (window.applyUserAvatar) window.applyUserAvatar();
-            } else {
-                console.log('No user data found, entering setup view');
-                // 如果是新用戶，進入設定畫面
-                activateView('view-setup');
-                document.getElementById('main-nav').style.display = 'flex';
-            }
+            console.log('User authenticated, processing signed-in user...');
+            await handleAuthenticatedUser(user);
         } else {
             console.log('No authenticated user, showing login view');
-            // 確實沒有登入狀態，才顯示登入頁面
             activateView('view-login');
             document.getElementById('main-nav').style.display = 'none';
         }
@@ -187,15 +194,26 @@ onAuthStateChanged(auth, async (user) => {
 
 // ========== 帳號相關 ==========
 
-window.loginWithGoogle = () => {
-    document.getElementById('loading-overlay').style.display = 'flex';
-    setPersistence(auth, browserLocalPersistence)
-        .then(() => signInWithRedirect(auth, provider))
-        .catch((error) => {
-            console.error('設定登入持久性失敗：', error);
-            document.getElementById('loading-overlay').style.display = 'none';
+window.loginWithGoogle = async () => {
+    const loading = document.getElementById('loading-overlay');
+    if (loading) loading.style.display = 'flex';
+    try {
+        await setPersistence(auth, browserLocalPersistence);
+        const result = await signInWithPopup(auth, provider);
+        if (result?.user) {
+            await handleAuthenticatedUser(result.user);
+        }
+    } catch (error) {
+        console.error('Google 登入失敗：', error);
+        if (error.code === 'auth/operation-not-supported-in-this-environment' ||
+            error.code === 'auth/popup-blocked-by-polite-client' ||
+            error.code === 'auth/popup-blocked') {
+            signInWithRedirect(auth, provider);
+        } else {
+            if (loading) loading.style.display = 'none';
             window.showToast('登入初始化失敗，請稍候再試。');
-        });
+        }
+    }
 };
 
 window.logout = () => {

@@ -54,18 +54,15 @@ window.isGuestMode = false;
 window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
-            <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="${bgColor}" />
-                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.2" />
-            </linearGradient></defs>
-            <rect width="120" height="120" rx="60" fill="url(#g)" />
+            <rect width="120" height="120" rx="60" fill="${bgColor}" />
             <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Noto Serif TC, serif" fill="white" font-weight="700">${letter}</text>
         </svg>`;
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
-window.avatarPalette = ['#E63946', '#F77F00', '#F4D35E', '#2A9D8F', '#457B9D', '#9D4EDD', '#FFB6C1'];
-window.currentAvatarSelection = { letter: '火', color: '#C66E52' };
+window.avatarPalette = ['#bc454f', '#C66E52', '#ceb55a', '#4e847e', '#44687f', '#83659c', '#cc98a0'];
+window.defaultAvatarBackgroundColor = '#C66E52';
+window.currentAvatarSelection = { letter: '火', color: window.defaultAvatarBackgroundColor };
 
 window.setAvatar = (avatarUrl) => {
     if (!userData) return;
@@ -76,8 +73,38 @@ window.setAvatar = (avatarUrl) => {
     if (homeAvatar) homeAvatar.src = avatarUrl;
 };
 
+window.getDefaultAvatarSelection = (nickname = '') => {
+    const chars = window.getNicknameAvatarChars(nickname);
+    return {
+        letter: chars[0] || '火',
+        color: window.defaultAvatarBackgroundColor
+    };
+};
+
+window.initAvatarSelectionFromNickname = (nickname = '') => {
+    window.currentAvatarSelection = window.getDefaultAvatarSelection(nickname);
+};
+
+window.toggleAvatarSettings = () => {
+    const panel = document.getElementById('avatar-custom-panel');
+    if (!panel) return;
+    const isActive = panel.classList.toggle('active');
+    if (isActive) {
+        panel.classList.remove('hidden');
+        window.renderAvatarOptions();
+    }
+};
+
+window.closeAvatarSettings = () => {
+    const panel = document.getElementById('avatar-custom-panel');
+    if (!panel) return;
+    panel.classList.remove('active');
+};
+
 window.resetAvatar = () => {
-    const defaultAvatar = currentUser?.photoURL || window.generateAvatarSvg((userData?.nickname || '你')[0], '#C66E52');
+    const defaultLetter = (userData?.nickname || '你').trim().charAt(0) || '火';
+    const defaultAvatar = currentUser?.photoURL || window.getAvatarPreviewUrl(defaultLetter, window.defaultAvatarBackgroundColor);
+    window.currentAvatarSelection = { letter: defaultLetter, color: window.defaultAvatarBackgroundColor };
     window.setAvatar(defaultAvatar);
 };
 
@@ -126,11 +153,7 @@ window.renderAvatarOptions = () => {
 
     const albumContainer = document.getElementById('avatar-album');
     if (albumContainer) {
-        albumContainer.innerHTML = chars.flatMap(letter => {
-            return window.avatarPalette.map(color => `
-                <img src="${window.getAvatarPreviewUrl(letter, color)}" class="avatar-thumb" data-letter="${letter}" data-color="${color}" onclick="window.selectAvatarPattern(this.dataset.letter, this.dataset.color)" alt="${letter}">
-            `);
-        }).join('');
+        albumContainer.innerHTML = '';
     }
 
     window.updateAvatarOptionHighlights();
@@ -142,6 +165,13 @@ window.updateAvatarSelection = (letter, color) => {
     const preview = document.getElementById('edit-avatar-preview');
     if (preview) preview.src = window.getAvatarPreviewUrl(window.currentAvatarSelection.letter, window.currentAvatarSelection.color);
     window.updateAvatarOptionHighlights();
+};
+
+window.updateBioCount = () => {
+    const bio = document.getElementById('edit-bio');
+    const counter = document.getElementById('bio-count');
+    if (!bio || !counter) return;
+    counter.innerText = `${bio.value.length}/50`;
 };
 
 window.selectAvatarPattern = (letter, color) => {
@@ -344,8 +374,10 @@ window.updateProfile = async () => {
     const nickname = document.getElementById('edit-nickname').value.trim();
     const dept     = document.getElementById('edit-dept').value.trim();
     const bio      = document.getElementById('edit-bio').value.trim();
+    const preview  = document.getElementById('edit-avatar-preview');
+    const updatedAvatar = preview?.src || userData.avatar;
     if (window.isGuestMode) {
-        userData = { ...userData, realName, nickname, dept, bio };
+        userData = { ...userData, realName, nickname, dept, bio, avatar: updatedAvatar };
         localStorage.setItem('guest_user_data', JSON.stringify(userData));
     } else {
         await updateDoc(doc(db, "users", currentUser.uid), {
@@ -353,9 +385,9 @@ window.updateProfile = async () => {
             nickname,
             dept,
             bio,
-            avatar: userData.avatar
+            avatar: updatedAvatar
         });
-        userData = { ...userData, realName, nickname, dept, bio };
+        userData = { ...userData, realName, nickname, dept, bio, avatar: updatedAvatar };
     }
     window.showToast('修改成功！');
     window.switchView('view-home');
@@ -530,7 +562,7 @@ window.switchView = (viewId) => {
         document.getElementById('edit-nickname').value = userData.nickname  || '';
         document.getElementById('edit-dept').value     = userData.dept      || '';
         document.getElementById('edit-bio').value      = userData.bio       || '';
-        document.getElementById('edit-avatar-preview').src = userData.avatar || window.generateAvatarSvg(userData.nickname?.[0] || '你', '#C66E52');
+        document.getElementById('edit-avatar-preview').src = userData.avatar || window.generateAvatarSvg(userData.nickname?.[0] || '你', window.defaultAvatarBackgroundColor);
         if (!window.nicknameAvatarInputListenerAdded) {
             const nicknameInput = document.getElementById('edit-nickname');
             if (nicknameInput) {
@@ -540,7 +572,17 @@ window.switchView = (viewId) => {
                 window.nicknameAvatarInputListenerAdded = true;
             }
         }
+        if (!window.bioCountInputListenerAdded) {
+            const bioInput = document.getElementById('edit-bio');
+            if (bioInput) {
+                bioInput.addEventListener('input', window.updateBioCount);
+                window.bioCountInputListenerAdded = true;
+            }
+        }
+        window.initAvatarSelectionFromNickname(userData.nickname || '你');
         window.renderAvatarOptions();
+        window.updateBioCount();
+        window.closeAvatarSettings();
     }
 };
 
@@ -552,7 +594,7 @@ window.updatePointsUI = () => {
 };
 
 window.applyUserAvatar = () => {
-    const avatarUrl = userData?.avatar || currentUser?.photoURL || window.generateAvatarSvg(userData?.nickname?.[0] || '你', '#C66E52');
+    const avatarUrl = userData?.avatar || currentUser?.photoURL || window.generateAvatarSvg(userData?.nickname?.[0] || '你', window.defaultAvatarBackgroundColor);
     const homeAvatar = document.getElementById('home-avatar');
     const profilePreview = document.getElementById('edit-avatar-preview');
     if (homeAvatar) homeAvatar.src = avatarUrl;

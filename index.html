@@ -120,17 +120,18 @@
             </div>
             <div class="form-group">
                 <label>個人頭像</label>
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <img id="edit-avatar-preview" src="587780265_17853820758583520_8125964642604352843_n.jpg" alt="我的頭像" style="width:72px; height:72px; border-radius:50%; object-fit:cover; border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-                    <button class="reset-score-btn" onclick="window.resetAvatar()">重置頭像</button>
+                <div class="profile-avatar-row">
+                    <img id="edit-avatar-preview" src="587780265_17853820758583520_8125964642604352843_n.jpg" alt="我的頭像" class="profile-avatar-preview">
+                    <div class="avatar-action-column">
+                        <button class="small-action-btn" onclick="window.toggleAvatarSettings()">自訂頭像</button>
+                        <button class="small-action-btn" onclick="window.resetAvatar()">重置頭像</button>
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>自訂頭貼字元與色彩</label>
-                <p style="font-size:14px; color:#666; margin-top:6px; line-height:1.5;">從你的公開暱稱字元中選一個字，再從調色包挑一個顏色，點擊下方圖示即可套用。</p>
-                <div id="avatar-char-options" class="avatar-selector-row"></div>
-                <div id="avatar-color-palette" class="avatar-selector-row"></div>
-                <div id="avatar-album" class="avatar-album"></div>
+                <div id="avatar-custom-panel" class="avatar-custom-panel">
+                    <p style="font-size:14px; color:#666; margin-top:0; line-height:1.5;">點擊字元或顏色即可即時預覽，修改後按下「確認修改」才會儲存。</p>
+                    <div id="avatar-char-options" class="avatar-selector-row"></div>
+                    <div id="avatar-color-palette" class="avatar-selector-row"></div>
+                </div>
             </div>
             <div class="form-group">
                 <label>真實姓名（不公開）</label>
@@ -144,11 +145,12 @@
                 <label>系級</label>
                 <input type="text" id="edit-dept">
             </div>
-            <div class="form-group">
+            <div class="form-group textarea-group">
                 <label>自我介紹</label>
                 <textarea id="edit-bio" maxlength="50" rows="3"></textarea>
+                <div class="textarea-footer"><span id="bio-count">0/50</span></div>
             </div>
-            <button class="main-btn btn-start" onclick="window.updateProfile()">儲存修改</button>
+            <button class="main-btn btn-start" onclick="window.updateProfile()">確認修改</button>
             <button onclick="window.logout()"
                     style="width:100%; background:none; border:1px solid #888; padding:10px; border-radius:20px; color:#666; font-weight:bold; margin-top:10px; cursor:pointer;">
                 登出帳號

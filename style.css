@@ -516,6 +516,66 @@ button:active { transform: scale(0.97) !important; }
     border-color: var(--color-red);
     box-shadow: 0 0 0 4px rgba(198,110,82,0.15);
 }
+.avatar-custom-panel {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: #fff7ed;
+    border: 1px solid #f0d0b2;
+    border-radius: 16px;
+}
+.avatar-custom-panel.active {
+    display: flex;
+}
+.profile-avatar-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+.profile-avatar-preview {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.avatar-action-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    align-items: flex-end;
+}
+.small-action-btn {
+    background: none;
+    border: 1px solid #777;
+    color: #555;
+    padding: 8px 14px;
+    border-radius: 18px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    min-width: 96px;
+    white-space: nowrap;
+}
+.textarea-group {
+    position: relative;
+}
+.textarea-group textarea {
+    resize: none;
+    overflow: auto;
+    max-height: 120px;
+}
+.textarea-footer {
+    position: absolute;
+    right: 12px;
+    bottom: 10px;
+    font-size: 12px;
+    color: #666;
+}
 .avatar-album {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

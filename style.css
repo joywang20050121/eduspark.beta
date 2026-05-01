@@ -485,6 +485,58 @@ button:active { transform: scale(0.97) !important; }
     background: white;
     font-family: 'Noto Serif TC', serif;
 }
+.avatar-selector-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+.avatar-char-btn, .avatar-color-swatch {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.avatar-char-btn {
+    background: white;
+    color: #333;
+    font-size: 20px;
+    font-weight: bold;
+}
+.avatar-color-swatch {
+    background: #eee;
+}
+.avatar-char-btn.active, .avatar-color-swatch.active {
+    border-color: var(--color-red);
+    box-shadow: 0 0 0 4px rgba(198,110,82,0.15);
+}
+.avatar-album {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+.avatar-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 18px;
+    object-fit: cover;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.avatar-thumb:hover {
+    transform: translateY(-2px);
+}
+.avatar-thumb.active {
+    border-color: var(--color-red);
+}
 
 /* ===== Toast 通知 ===== */
 #toast {

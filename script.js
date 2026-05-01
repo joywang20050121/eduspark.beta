@@ -64,13 +64,8 @@ window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
-window.avatarPatterns = [
-    window.generateAvatarSvg('馬', '#4f5cad'),
-    window.generateAvatarSvg('羊', '#5A9B7F'),
-    window.generateAvatarSvg('猴', '#b8753b'),
-    window.generateAvatarSvg('雞', '#D9646E'),
-    window.generateAvatarSvg('狗', '#bb9c62')
-];
+window.avatarPalette = ['#E63946', '#F77F00', '#F4D35E', '#2A9D8F', '#457B9D', '#9D4EDD', '#FFB6C1'];
+window.currentAvatarSelection = { letter: '火', color: '#C66E52' };
 
 window.setAvatar = (avatarUrl) => {
     if (!userData) return;
@@ -86,18 +81,75 @@ window.resetAvatar = () => {
     window.setAvatar(defaultAvatar);
 };
 
-window.renderAvatarAlbum = () => {
-    const container = document.getElementById('avatar-album');
-    if (!container) return;
-    container.innerHTML = window.avatarPatterns.map((url, index) => `
-        <img src="${url}" class="album-thumb" data-url="${url}" onclick="window.selectAvatarPattern(this.dataset.url)" style="width:56px; height:56px; border-radius:16px; object-fit:cover; cursor:pointer; border: 2px solid transparent;">
-    `).join('');
+window.getNicknameAvatarChars = (nickname = '') => {
+    const chars = [...new Set([...String(nickname).trim()].filter(ch => ch !== ''))];
+    return chars.length > 0 ? chars : ['火'];
 };
 
-window.selectAvatarPattern = (patternUrl) => {
-    window.setAvatar(patternUrl);
-    const items = document.querySelectorAll('#avatar-album img');
-    items.forEach(img => img.style.borderColor = img.src === patternUrl ? '#F08A1E' : 'transparent');
+window.getAvatarPreviewUrl = (letter, bgColor) => window.generateAvatarSvg(letter, bgColor);
+
+window.updateAvatarOptionHighlights = () => {
+    document.querySelectorAll('.avatar-char-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.letter === window.currentAvatarSelection.letter);
+    });
+    document.querySelectorAll('.avatar-color-swatch').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color === window.currentAvatarSelection.color);
+    });
+    document.querySelectorAll('.avatar-thumb').forEach(img => {
+        img.classList.toggle('active', img.dataset.letter === window.currentAvatarSelection.letter && img.dataset.color === window.currentAvatarSelection.color);
+    });
+};
+
+window.renderAvatarOptions = () => {
+    const nickname = document.getElementById('edit-nickname')?.value.trim() || userData?.nickname || '';
+    const chars = window.getNicknameAvatarChars(nickname);
+    if (!chars.includes(window.currentAvatarSelection.letter)) {
+        window.currentAvatarSelection.letter = chars[0];
+    }
+    if (!window.avatarPalette.includes(window.currentAvatarSelection.color)) {
+        window.currentAvatarSelection.color = window.avatarPalette[0];
+    }
+
+    const charContainer = document.getElementById('avatar-char-options');
+    if (charContainer) {
+        charContainer.innerHTML = chars.map(ch => `
+            <button type="button" class="avatar-char-btn" data-letter="${ch}" onclick="window.updateAvatarSelection('${ch}', null)">${ch}</button>
+        `).join('');
+    }
+
+    const paletteContainer = document.getElementById('avatar-color-palette');
+    if (paletteContainer) {
+        paletteContainer.innerHTML = window.avatarPalette.map(color => `
+            <button type="button" class="avatar-color-swatch" data-color="${color}" style="background:${color};" onclick="window.updateAvatarSelection(null, '${color}')"></button>
+        `).join('');
+    }
+
+    const albumContainer = document.getElementById('avatar-album');
+    if (albumContainer) {
+        albumContainer.innerHTML = chars.flatMap(letter => {
+            return window.avatarPalette.map(color => `
+                <img src="${window.getAvatarPreviewUrl(letter, color)}" class="avatar-thumb" data-letter="${letter}" data-color="${color}" onclick="window.selectAvatarPattern(this.dataset.letter, this.dataset.color)" alt="${letter}">
+            `);
+        }).join('');
+    }
+
+    window.updateAvatarOptionHighlights();
+};
+
+window.updateAvatarSelection = (letter, color) => {
+    if (letter) window.currentAvatarSelection.letter = letter;
+    if (color) window.currentAvatarSelection.color = color;
+    const preview = document.getElementById('edit-avatar-preview');
+    if (preview) preview.src = window.getAvatarPreviewUrl(window.currentAvatarSelection.letter, window.currentAvatarSelection.color);
+    window.updateAvatarOptionHighlights();
+};
+
+window.selectAvatarPattern = (letter, color) => {
+    const avatarUrl = window.getAvatarPreviewUrl(letter, color);
+    window.currentAvatarSelection.letter = letter;
+    window.currentAvatarSelection.color = color;
+    window.setAvatar(avatarUrl);
+    window.updateAvatarOptionHighlights();
 };
 
 // ========== 排行榜與詳細資訊 ==========
@@ -479,8 +531,16 @@ window.switchView = (viewId) => {
         document.getElementById('edit-dept').value     = userData.dept      || '';
         document.getElementById('edit-bio').value      = userData.bio       || '';
         document.getElementById('edit-avatar-preview').src = userData.avatar || window.generateAvatarSvg(userData.nickname?.[0] || '你', '#C66E52');
-        window.renderAvatarAlbum();
-        window.selectAvatarPattern(document.getElementById('edit-avatar-preview').src);
+        if (!window.nicknameAvatarInputListenerAdded) {
+            const nicknameInput = document.getElementById('edit-nickname');
+            if (nicknameInput) {
+                nicknameInput.addEventListener('input', () => {
+                    window.renderAvatarOptions();
+                });
+                window.nicknameAvatarInputListenerAdded = true;
+            }
+        }
+        window.renderAvatarOptions();
     }
 };
 

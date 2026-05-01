@@ -133,10 +133,13 @@ getRedirectResult(auth).then((result) => {
 // --- 修正後的登入監聽邏輯 ---
 onAuthStateChanged(auth, async (user) => {
     const loading = document.getElementById('loading-overlay');
+    console.log('onAuthStateChanged triggered:', user ? `User: ${user.uid}, Email: ${user.email}` : 'No user');
     try {
         if (user) {
+            console.log('User authenticated, fetching data from Firestore...');
             currentUser = user;
             const snap = await getDoc(doc(db, "users", user.uid));
+            console.log('Firestore query result:', snap.exists() ? 'Data exists' : 'No data found');
             
             if (snap.exists()) {
                 userData = snap.data();
@@ -145,16 +148,19 @@ onAuthStateChanged(auth, async (user) => {
                     userData.avatar = user.photoURL || window.generateAvatarSvg((userData.nickname || '你')[0], '#C66E52');
                 }
                 redemptionHistory = userData.history;
+                console.log('Entering home view');
                 activateView('view-home');
                 document.getElementById('main-nav').style.display = 'flex';
                 if (window.updatePointsUI) window.updatePointsUI();
                 if (window.applyUserAvatar) window.applyUserAvatar();
             } else {
+                console.log('No user data found, entering setup view');
                 // 如果是新用戶，進入設定畫面
                 activateView('view-setup');
                 document.getElementById('main-nav').style.display = 'flex';
             }
         } else {
+            console.log('No authenticated user, showing login view');
             // 確實沒有登入狀態，才顯示登入頁面
             activateView('view-login');
             document.getElementById('main-nav').style.display = 'none';
@@ -451,6 +457,10 @@ window.applyUserAvatar = () => {
 };
 
 window.showComingSoon = () => window.showToast('敬請期待！');
+
+window.showTeamIntro = () => {
+    alert('本計畫由教育學院學士班27級王巧樂、28級李好等人發起，目的是讓教育學院的大家可以有更多交流的機會！歡迎多多分享給妳身邊的朋友們，讓大家一起成為教育學院中的小火花吧！🔥');
+};
 
 // ========== Toast 通知 ==========
 let toastTimeout;

@@ -60,7 +60,7 @@ window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
 
-window.avatarPalette = ['#bc454f', '#C66E52', '#ceb55a', '#4e847e', '#44687f', '#83659c', '#cc98a0'];
+window.avatarPalette = ['#a24a51', '#C66E52', '#c1a84b', '#4e847e', '#44687f', '#786690', '#cc98a0'];
 window.defaultAvatarBackgroundColor = '#C66E52';
 window.currentAvatarSelection = { letter: '火', color: window.defaultAvatarBackgroundColor };
 

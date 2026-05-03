@@ -139,7 +139,7 @@ button:active { transform: scale(0.97) !important; }
     border-radius: 50%;
     overflow: hidden;
     object-fit: cover;
-    border: 2px solid white;
+    border: 2px solid var(--bg-color);
     cursor: pointer;
     display: block;
 }
@@ -171,7 +171,7 @@ button:active { transform: scale(0.97) !important; }
     height: 60px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid white;
+    border: 3px solid var(--bg-color);
     cursor: pointer;
 }
 
@@ -520,7 +520,7 @@ button:active { transform: scale(0.97) !important; }
 
 /* ===== 排行榜 ===== */
 .rank-badge { width: 28px; text-align: center; font-weight: bold; color: var(--color-red); font-size: 18px; margin-right: 12px; }
-.leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-right: 12px; }
+.leader-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--bg-color); box-shadow: 0 1px 4px rgba(0,0,0,0.15); margin-right: 12px; }
 .leader-avatar-wrapper { display: flex; justify-content: center; align-items: center; }
 .user-details { flex: 1; }
 .user-name-tag { font-weight: bold; color: #333; }
@@ -626,7 +626,7 @@ button:active { transform: scale(0.97) !important; }
     height: 72px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid white;
+    border: 3px solid var(--bg-color);
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .avatar-action-column {

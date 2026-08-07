@@ -212,21 +212,48 @@ window.selectAvatarPattern = (letter, color) => {
 };
 
 // ========== 排行榜與詳細資訊 ==========
+window.getSocialUserDisplayData = (user = {}) => {
+    const nickname = user.nickname || user.displayName || user.name || '小火花夥伴';
+    const dept = user.dept || user.department || user.className || user.class || '系級未填';
+    const bio = user.bio || user.introduction || user.selfIntro || user.intro || user.description || user.about || '尚未留下自我介紹';
+    const avatar = user.avatar || user.photoURL || user.avatarUrl || window.generateAvatarSvg((nickname || '友').trim().charAt(0) || '友', '#758A93');
+    const points = Number(user.points || 0);
+    const redeemed = Number(user.redeemed || 0);
+    const totalPoints = Number(user.totalPoints ?? points + redeemed);
+
+    return {
+        nickname,
+        dept,
+        bio,
+        avatar,
+        points,
+        redeemed,
+        totalPoints
+    };
+};
+
 window.showSocialDetail = (uid) => {
     const user = window.leaderboardUsers.find(item => item.id === uid);
     const detail = document.getElementById('leaderboard-detail');
     const overlay = document.getElementById('leaderboard-detail-overlay');
     const content = document.getElementById('detail-content');
     if (!user || !detail) return;
+
+    const profile = window.getSocialUserDisplayData(user);
     content.innerHTML = `
         <div class="detail-row">
-            <img src="${user.avatar || window.generateAvatarSvg(user.nickname?.[0] || '友', '#758A93')}" alt="${user.nickname} 頭像">
+            <img src="${profile.avatar}" alt="${profile.nickname} 頭像">
             <div>
-                <div class="detail-name">${user.nickname}${user.id === currentUser?.uid ? ' <span class="me-badge">（我）</span>' : ''}</div>
-                <div class="detail-text">${user.dept || '系級未填'}</div>
+                <div class="detail-name">${profile.nickname}${user.id === currentUser?.uid ? ' <span class="me-badge">（我）</span>' : ''}</div>
+                <div class="detail-text">${profile.dept}</div>
             </div>
         </div>
-        <div class="detail-text">${user.bio || '尚未留下自我介紹'}</div>
+        <div class="detail-info-block">
+            <div class="detail-text"><strong>自我介紹：</strong>${profile.bio}</div>
+            <div class="detail-text"><strong>目前積分：</strong>${profile.points} 點</div>
+            <div class="detail-text"><strong>總積分：</strong>${profile.totalPoints} 點</div>
+            ${profile.redeemed > 0 ? `<div class="detail-text"><strong>已兌換：</strong>-${profile.redeemed} 點</div>` : ''}
+        </div>
     `;
     detail.classList.add('active');
     overlay.classList.add('active');
@@ -561,11 +588,12 @@ window.fetchLeaderboard = async () => {
     snap.forEach(d => {
         const data = d.data();
         const isMe = d.id === currentUser?.uid;
-        const avatarUrl = data.avatar || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
         const historyData = Array.isArray(data.history) ? data.history : [];
         const redeemed = window.getRedeemedPoints(historyData);
         const totalPoints = Number(data.points || 0) + redeemed;
-        users.push({ id: d.id, ...data, avatar: avatarUrl, isMe, redeemed, totalPoints });
+        const avatarUrl = data.avatar || data.photoURL || data.avatarUrl || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
+        const profile = window.getSocialUserDisplayData({ ...data, avatar: avatarUrl, points: data.points, redeemed, totalPoints });
+        users.push({ id: d.id, ...data, ...profile, avatar: avatarUrl, isMe, redeemed, totalPoints });
     });
 
     if (window.leaderboardMode === 'current') {
@@ -582,7 +610,11 @@ window.fetchLeaderboard = async () => {
         list.innerHTML += `
             <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${user.id}')">
                 <div class="rank-badge">${rank++}</div>
-                <div class="leader-avatar-wrapper"><img src="${user.avatar}" class="leader-avatar" alt="${user.nickname} 頭像"></div>
+                <div class="leader-avatar-wrapper" role="button" tabindex="0"
+                     onclick="event.stopPropagation(); window.showSocialDetail('${user.id}')"
+                     onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); window.showSocialDetail('${user.id}'); }">
+                    <img src="${user.avatar}" class="leader-avatar" alt="${user.nickname} 頭像">
+                </div>
                 <div class="user-details">
                     <div class="user-name-tag">${user.nickname}${user.isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
                     <div class="user-dept-tag">${user.dept || '教院小夥伴'}</div>

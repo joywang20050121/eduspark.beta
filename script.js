@@ -1,8 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import {
-    getAuth, signInWithRedirect, signInWithPopup, getRedirectResult,
-    GoogleAuthProvider, onAuthStateChanged, signOut,
-    setPersistence, browserLocalPersistence
+    getAuth, signInWithPopup,
+    GoogleAuthProvider, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 import {
     getFirestore, doc, setDoc, getDoc, updateDoc,
@@ -33,27 +32,11 @@ const db       = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
-const redirectStateKey = 'firebase_auth_redirect_url';
-const saveRedirectState = () => {
-    sessionStorage.setItem(redirectStateKey, window.location.href);
-};
-const clearRedirectState = () => {
-    sessionStorage.removeItem(redirectStateKey);
-};
-const restoreRedirectState = () => {
-    const saved = sessionStorage.getItem(redirectStateKey);
-    if (!saved) return false;
-    clearRedirectState();
-    if (saved !== window.location.href) {
-        window.location.replace(saved);
-        return true;
-    }
-    return false;
-};
-
 // ========== 全域狀態 ==========
 let currentUser = null;
 let userData    = null;
+let authenticatedUserLoadPromise = null;
+let authenticatedUserLoadUid = null;
 let redemptionHistory = [];
 window.leaderboardUsers = [];
 window.isGuestMode = false;
@@ -300,47 +283,49 @@ const setMainNavVisible = (visible) => {
 const handleAuthenticatedUser = async (user) => {
     if (!user) return;
     if (currentUser?.uid === user.uid && userData) return;
+    if (authenticatedUserLoadUid === user.uid && authenticatedUserLoadPromise) {
+        return authenticatedUserLoadPromise;
+    }
+
     currentUser = user;
-    try {
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (snap.exists()) {
-            const data = snap.data();
-            userData = {
-                ...data,
-                points: typeof data.points === 'number' ? data.points : 0,
-                history: Array.isArray(data.history) ? data.history : [],
-                avatar: data.avatar || user.photoURL || window.generateAvatarSvg((data.nickname || '你')[0], '#C66E52')
-            };
-            redemptionHistory = userData.history;
-            activateView('view-home');
-            setMainNavVisible(true);
-            if (window.updatePointsUI) window.updatePointsUI();
-            if (window.applyUserAvatar) window.applyUserAvatar();
-        } else {
-            userData = null;
-            activateView('view-setup');
-            setMainNavVisible(true);
+    authenticatedUserLoadUid = user.uid;
+    authenticatedUserLoadPromise = (async () => {
+        try {
+            const snap = await getDoc(doc(db, "users", user.uid));
+            if (snap.exists()) {
+                const data = snap.data();
+                userData = {
+                    ...data,
+                    points: typeof data.points === 'number' ? data.points : 0,
+                    history: Array.isArray(data.history) ? data.history : [],
+                    avatar: data.avatar || user.photoURL || window.generateAvatarSvg((data.nickname || '你')[0], '#C66E52')
+                };
+                redemptionHistory = userData.history;
+                activateView('view-home');
+                setMainNavVisible(true);
+                if (window.updatePointsUI) window.updatePointsUI();
+                if (window.applyUserAvatar) window.applyUserAvatar();
+            } else {
+                userData = null;
+                activateView('view-setup');
+                setMainNavVisible(true);
+            }
+        } catch (err) {
+            console.error('登入後讀取資料失敗:', err);
+            if (window.showToast) window.showToast('登入成功，但讀取資料失敗，請稍後重整');
+            activateView('view-login');
         }
-    } catch (err) {
-        console.error('登入後讀取資料失敗:', err);
-        if (window.showToast) window.showToast('登入成功，但讀取資料失敗，請稍後重整');
-        activateView('view-login');
+    })();
+
+    try {
+        await authenticatedUserLoadPromise;
+    } finally {
+        if (authenticatedUserLoadUid === user.uid) {
+            authenticatedUserLoadPromise = null;
+            authenticatedUserLoadUid = null;
+        }
     }
 };
-
-// --- 處理行動裝置 Redirect 結果 ---
-// 這一行非常重要，它會捕捉從 Google 頁面跳轉回來的登入資訊
-getRedirectResult(auth).then(async (result) => {
-    if (result?.user) {
-        console.log('Redirect login successful:', result.user.email);
-        await handleAuthenticatedUser(result.user);
-    }
-    restoreRedirectState();
-}).catch((error) => {
-    console.error("重新導向登入出錯:", error);
-    clearRedirectState();
-    if (window.showToast) window.showToast("登入連線中斷，請再試一次");
-});
 
 // --- 修正後的登入監聽邏輯 ---
 onAuthStateChanged(auth, async (user) => {
@@ -366,12 +351,6 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ========== 帳號相關 ==========
-
-// 行動裝置上 signInWithPopup 常因跳出視窗 / 第三方 storage 限制而失敗，
-// 且失敗時丟出的 error code 不見得在原本的白名單內，導致無法 fallback 到 redirect。
-// 因此手機一律直接走 signInWithRedirect，桌機才嘗試 popup。
-const isMobileDevice = (userAgent = navigator.userAgent) =>
-    /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
 
 // Google 不允許在 App 內建的 WebView 執行 OAuth。除了常見 App 標記，也要辨識
 // Android WebView 的 wv / Version 4.0，以及沒有 Safari 標記的 iOS WKWebView。
@@ -441,39 +420,48 @@ const setupInAppBrowserWarning = () => {
 };
 document.addEventListener('DOMContentLoaded', setupInAppBrowserWarning);
 
+let googleLoginInProgress = false;
+
 window.loginWithGoogle = async () => {
     if (isInAppBrowser()) {
         setupInAppBrowserWarning();
         if (window.showToast) window.showToast('請先在外部瀏覽器開啟本頁再登入');
         return;
     }
+
+    if (googleLoginInProgress) return;
+    googleLoginInProgress = true;
+
     const loading = document.getElementById('loading-overlay');
+    const loginBtn = document.getElementById('google-login-btn');
     if (loading) loading.style.display = 'flex';
-    saveRedirectState();
+    if (loginBtn) loginBtn.disabled = true;
+
     try {
-        await setPersistence(auth, browserLocalPersistence);
-        if (isMobileDevice()) {
-            await signInWithRedirect(auth, provider);
-            return;
-        }
         const result = await signInWithPopup(auth, provider);
         if (result?.user) {
-            clearRedirectState();
             await handleAuthenticatedUser(result.user);
+            if (userData) {
+                window.switchView('view-profile');
+            }
         }
     } catch (error) {
         console.error('Google 登入失敗：', error.code, error.message);
-        if (error.code === 'auth/operation-not-supported-in-this-environment' ||
-            error.code === 'auth/popup-blocked-by-polite-client' ||
-            error.code === 'auth/popup-blocked' ||
-            error.code === 'auth/cancelled-popup-request' ||
-            error.code === 'auth/web-storage-unsupported') {
-            signInWithRedirect(auth, provider);
+        if (error.code === 'auth/popup-closed-by-user' ||
+            error.code === 'auth/cancelled-popup-request') {
+            window.showToast('Google 登入已取消');
+        } else if (error.code === 'auth/popup-blocked' ||
+            error.code === 'auth/operation-not-supported-in-this-environment') {
+            window.showToast('瀏覽器阻擋了登入視窗，請允許彈出式視窗後再試');
+        } else if (error.code === 'auth/unauthorized-domain') {
+            window.showToast('目前網址尚未加入 Firebase 授權網域');
         } else {
-            if (loading) loading.style.display = 'none';
-            clearRedirectState();
             window.showToast(`登入初始化失敗（${error.code || '未知錯誤'}），請稍候再試。`);
         }
+    } finally {
+        googleLoginInProgress = false;
+        if (loginBtn) loginBtn.disabled = false;
+        if (loading) loading.style.display = 'none';
     }
 };
 

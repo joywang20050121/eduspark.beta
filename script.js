@@ -359,26 +359,38 @@ onAuthStateChanged(auth, async (user) => {
 
 // ========== 帳號相關 ==========
 
+// 行動裝置上 signInWithPopup 常因跳出視窗 / 第三方 storage 限制而失敗，
+// 且失敗時丟出的 error code 不見得在原本的白名單內，導致無法 fallback 到 redirect。
+// 因此手機一律直接走 signInWithRedirect，桌機才嘗試 popup。
+const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 window.loginWithGoogle = async () => {
     const loading = document.getElementById('loading-overlay');
     if (loading) loading.style.display = 'flex';
     saveRedirectState();
     try {
         await setPersistence(auth, browserLocalPersistence);
+        if (isMobileDevice()) {
+            await signInWithRedirect(auth, provider);
+            return;
+        }
         const result = await signInWithPopup(auth, provider);
         if (result?.user) {
             clearRedirectState();
             await handleAuthenticatedUser(result.user);
         }
     } catch (error) {
-        console.error('Google 登入失敗：', error);
+        console.error('Google 登入失敗：', error.code, error.message);
         if (error.code === 'auth/operation-not-supported-in-this-environment' ||
             error.code === 'auth/popup-blocked-by-polite-client' ||
-            error.code === 'auth/popup-blocked') {
+            error.code === 'auth/popup-blocked' ||
+            error.code === 'auth/cancelled-popup-request' ||
+            error.code === 'auth/web-storage-unsupported') {
             signInWithRedirect(auth, provider);
         } else {
             if (loading) loading.style.display = 'none';
-            window.showToast('登入初始化失敗，請稍候再試。');
+            clearRedirectState();
+            window.showToast(`登入初始化失敗（${error.code || '未知錯誤'}），請稍候再試。`);
         }
     }
 };

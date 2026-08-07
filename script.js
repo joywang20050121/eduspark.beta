@@ -10,9 +10,17 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
 // ========== Firebase 初始化 ==========
+const firebaseHostingDomains = new Set([
+    "edu-spark2026.firebaseapp.com",
+    "edu-spark2026.web.app"
+]);
+const authDomain = firebaseHostingDomains.has(window.location.hostname)
+    ? window.location.hostname
+    : "edu-spark2026.firebaseapp.com";
+
 const firebaseConfig = {
     apiKey: "AIzaSyBrKv83q_URyL2QpWogPqh-4ebZ-GNJ5Js",
-    authDomain: "edu-spark2026.firebaseapp.com",
+    authDomain,
     projectId: "edu-spark2026",
     storageBucket: "edu-spark2026.firebasestorage.app",
     messagingSenderId: "803298416028",
@@ -362,9 +370,83 @@ onAuthStateChanged(auth, async (user) => {
 // 行動裝置上 signInWithPopup 常因跳出視窗 / 第三方 storage 限制而失敗，
 // 且失敗時丟出的 error code 不見得在原本的白名單內，導致無法 fallback 到 redirect。
 // 因此手機一律直接走 signInWithRedirect，桌機才嘗試 popup。
-const isMobileDevice = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const isMobileDevice = (userAgent = navigator.userAgent) =>
+    /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+
+// Google 不允許在 App 內建的 WebView 執行 OAuth。除了常見 App 標記，也要辨識
+// Android WebView 的 wv / Version 4.0，以及沒有 Safari 標記的 iOS WKWebView。
+const isInAppBrowser = (userAgent = navigator.userAgent) => {
+    const knownInAppBrowser = /Line\/|FBAN|FBAV|FB_IAB|Instagram|MicroMessenger|GSA\/|Twitter|TikTok|musical_ly|BytedanceWebview|Snapchat|Pinterest|LinkedInApp|Threads/i;
+    const androidWebView = /;\s*wv\)/i.test(userAgent) ||
+        (/Android/i.test(userAgent) && /Version\/4\.0/i.test(userAgent));
+    const iosWebView = /(iPhone|iPad|iPod)/i.test(userAgent) &&
+        /AppleWebKit/i.test(userAgent) &&
+        !/Safari/i.test(userAgent);
+
+    return knownInAppBrowser.test(userAgent) || androidWebView || iosWebView;
+};
+
+const copyCurrentUrl = async () => {
+    const url = window.location.href;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(url);
+            return true;
+        }
+
+        const input = document.createElement('textarea');
+        input.value = url;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        input.remove();
+        return copied;
+    } catch (error) {
+        console.error('複製網址失敗：', error);
+        return false;
+    }
+};
+
+const setupInAppBrowserWarning = () => {
+    if (!isInAppBrowser()) return;
+    const warning = document.getElementById('inapp-browser-warning');
+    const loginBtn = document.getElementById('google-login-btn');
+    if (warning) warning.style.display = 'block';
+    if (loginBtn) loginBtn.style.display = 'none';
+
+    const openBtn = document.getElementById('open-external-browser-btn');
+    if (openBtn) {
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        openBtn.innerText = isAndroid ? '使用 Chrome 開啟' : '複製網址';
+        openBtn.onclick = async () => {
+            const url = window.location.href;
+            if (isAndroid && /^https?:\/\//i.test(url)) {
+                const target = url.replace(/^https?:\/\//, '');
+                const scheme = url.startsWith('http://') ? 'http' : 'https';
+                window.location.href = `intent://${target}#Intent;scheme=${scheme};package=com.android.chrome;end`;
+                return;
+            }
+
+            const copied = await copyCurrentUrl();
+            if (window.showToast) {
+                window.showToast(copied
+                    ? '網址已複製，請貼到 Safari 或 Chrome 開啟'
+                    : '請從選單選擇「使用外部瀏覽器開啟」');
+            }
+        };
+    }
+};
+document.addEventListener('DOMContentLoaded', setupInAppBrowserWarning);
 
 window.loginWithGoogle = async () => {
+    if (isInAppBrowser()) {
+        setupInAppBrowserWarning();
+        if (window.showToast) window.showToast('請先在外部瀏覽器開啟本頁再登入');
+        return;
+    }
     const loading = document.getElementById('loading-overlay');
     if (loading) loading.style.display = 'flex';
     saveRedirectState();

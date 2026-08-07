@@ -23,11 +23,22 @@
         <!-- ===== 登入頁 ===== -->
         <div id="view-login" class="view">
             <div style="text-align: center; margin-top: 80px;">
-                <img src="Spark1.png"
+                <img src="spark1.png" alt="教院小火花"
                      style="width: 120px; border-radius: 50%; margin-bottom: 20px; border: 4px solid #EAE4D5;">
                 <h1 style="color: #444; letter-spacing: 2px; margin-bottom: 8px;">教院小火花</h1>
                 <p style="color: #666; margin-bottom: 40px;">活化空間，點燃熱情</p>
-                <button class="main-btn btn-start" onclick="window.loginWithGoogle()">使用 Google 帳號登入</button>
+
+                <!-- App 內建瀏覽器會被 Google 擋下登入，改顯示外部瀏覽器提示 -->
+                <div id="inapp-browser-warning" style="display:none; background:#FFF4E5; border:1px solid #F0C36D; border-radius:12px; padding:16px; margin:0 20px 24px; text-align:left;">
+                    <p style="color:#8a5a00; font-weight:bold; margin-bottom:8px;">Google 不允許在此瀏覽器內登入</p>
+                    <p style="color:#8a5a00; font-size:14px; line-height:1.6; margin-bottom:12px;">
+                        你目前使用 App 內建瀏覽器，Google 帳號登入會被系統封鎖。<br>
+                        請改用 Chrome 或 Safari 開啟這個網頁。
+                    </p>
+                    <button class="main-btn btn-start" id="open-external-browser-btn" style="width:100%;">在瀏覽器開啟</button>
+                </div>
+
+                <button class="main-btn btn-start" id="google-login-btn" onclick="window.loginWithGoogle()">使用 Google 帳號登入</button>
                 <button class="main-btn btn-wish" onclick="window.loginAsGuest()" style="margin-top: 15px;">訪客遊玩</button>
             </div>
         </div>
@@ -58,7 +69,7 @@
         <div id="view-home" class="view">
             <div class="home-header">
                 <div class="home-title">
-                    <img src="Spark2.png"
+                    <img src="spark2.png"
                          alt="執行團隊介紹"
                          class="home-title-avatar"
                          onclick="window.showTeamIntro()">
@@ -298,7 +309,7 @@
 </div>
 
 <!-- Firebase 與應用邏輯 -->
-<script type="module" src="script.js?v=1"></script>
+<script type="module" src="script.js?v=2"></script>
 
 </body>
 </html>

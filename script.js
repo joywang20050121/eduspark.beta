@@ -441,9 +441,6 @@ window.loginWithGoogle = async () => {
         const result = await signInWithPopup(auth, provider);
         if (result?.user) {
             await handleAuthenticatedUser(result.user);
-            if (userData) {
-                window.switchView('view-profile');
-            }
         }
     } catch (error) {
         console.error('Google 登入失敗：', error.code, error.message);
@@ -504,6 +501,65 @@ window.loginAsGuest = async () => {
     if (window.updatePointsUI) window.updatePointsUI();
     if (window.applyUserAvatar) window.applyUserAvatar();
     if (window.showToast) window.showToast('歡迎以訪客模式遊玩！數據不會被保存。');
+};
+
+// ========== 建立個人檔案 ==========
+let setupInProgress = false;
+
+window.completeSetup = async () => {
+    if (setupInProgress) return;
+
+    const realName = document.getElementById('setup-realname')?.value.trim() || '';
+    const nickname = document.getElementById('setup-nickname')?.value.trim() || '';
+    const dept = document.getElementById('setup-dept')?.value.trim() || '';
+    const bio = document.getElementById('setup-bio')?.value.trim() || '';
+
+    if (!realName || !nickname) {
+        window.showToast('請填寫真實姓名與公開暱稱');
+        return;
+    }
+    if (!currentUser) {
+        window.showToast('登入狀態已失效，請重新登入');
+        activateView('view-login');
+        setMainNavVisible(false);
+        return;
+    }
+
+    setupInProgress = true;
+    const setupButton = document.getElementById('complete-setup-btn');
+    const loading = document.getElementById('loading-overlay');
+    if (setupButton) setupButton.disabled = true;
+    if (loading) loading.style.display = 'flex';
+
+    try {
+        const avatar = currentUser.photoURL || window.generateAvatarSvg(nickname.charAt(0) || '火', window.defaultAvatarBackgroundColor);
+        const newUserData = {
+            realName,
+            nickname,
+            dept,
+            bio,
+            points: 0,
+            history: [],
+            avatar
+        };
+
+        await setDoc(doc(db, "users", currentUser.uid), newUserData);
+        userData = newUserData;
+        redemptionHistory = [];
+
+        setMainNavVisible(true);
+        activateView('view-home');
+        window.updatePointsUI();
+        window.applyUserAvatar();
+        window.showToast('個人檔案已建立！');
+    } catch (error) {
+        console.error('建立個人檔案失敗：', error);
+        window.showToast('個人檔案儲存失敗，請確認網路連線後再試');
+    } finally {
+        setupInProgress = false;
+        if (setupButton) setupButton.disabled = false;
+        if (loading) loading.style.display = 'none';
+    }
 };
 
 // ========== 更新個人資料 ==========

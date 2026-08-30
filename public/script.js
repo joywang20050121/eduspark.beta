@@ -14,17 +14,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-check.js";
 
 // ========== Firebase 初始化 ==========
-const firebaseHostingDomains = new Set([
-    "coespark-a3f6e.firebaseapp.com",
-    "coespark-a3f6e.web.app"
-]);
-const authDomain = firebaseHostingDomains.has(window.location.hostname)
-    ? window.location.hostname
-    : "coespark-a3f6e.firebaseapp.com";
-
 const firebaseConfig = {
     apiKey: "AIzaSyD4tdUd6o06zxMyyOq8CwyZuixrIh5j0Kk",
-    authDomain,
+    authDomain: "coespark-a3f6e.firebaseapp.com",
     projectId: "coespark-a3f6e",
     storageBucket: "coespark-a3f6e.firebasestorage.app",
     messagingSenderId: "495581170629",

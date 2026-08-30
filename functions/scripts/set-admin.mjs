@@ -12,6 +12,10 @@ if (!email) {
   });
   const auth = getAuth();
   const user = await auth.getUserByEmail(email);
-  await auth.setCustomUserClaims(user.uid, {...user.customClaims, admin: true});
+  await auth.setCustomUserClaims(user.uid, {
+    ...user.customClaims,
+    admin: true,
+    superAdmin: true,
+  });
   console.log(`已將 ${email} 設為管理員。請登出後重新登入。`);
 }

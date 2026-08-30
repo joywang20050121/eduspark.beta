@@ -53,6 +53,10 @@ const callCreateQrCampaign = httpsCallable(functions, 'createQrCampaign');
 const callListQrCampaigns = httpsCallable(functions, 'listQrCampaigns');
 const callGetQrCampaign = httpsCallable(functions, 'getQrCampaign');
 const callSetQrCampaignStatus = httpsCallable(functions, 'setQrCampaignStatus');
+const callLookupAdminUser = httpsCallable(functions, 'lookupAdminUser');
+const callListAdminUsers = httpsCallable(functions, 'listAdminUsers');
+const callSetAdminRole = httpsCallable(functions, 'setAdminRole');
+const callBootstrapSuperAdmin = httpsCallable(functions, 'bootstrapSuperAdmin');
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -63,6 +67,7 @@ let redemptionHistory = [];
 window.leaderboardUsers = [];
 window.isGuestMode = false;
 window.isAdmin = false;
+window.isSuperAdmin = false;
 window.leaderboardMode = 'current';
 
 const escapeHtml = (value) => String(value ?? '')
@@ -328,10 +333,15 @@ const setMainNavVisible = (visible) => {
     if (nav) nav.style.display = visible ? 'flex' : 'none';
 };
 
-const setAdminState = (isAdmin) => {
-    window.isAdmin = isAdmin === true;
+const setAdminState = (isAdmin, isSuperAdmin = false, canBootstrap = false) => {
+    window.isSuperAdmin = isSuperAdmin === true;
+    window.isAdmin = isAdmin === true || window.isSuperAdmin;
     const adminButton = document.getElementById('admin-entry-btn');
     if (adminButton) adminButton.style.display = window.isAdmin ? 'block' : 'none';
+    const roleButton = document.getElementById('admin-role-entry-btn');
+    if (roleButton) roleButton.style.display = window.isSuperAdmin ? 'block' : 'none';
+    const bootstrapButton = document.getElementById('bootstrap-admin-btn');
+    if (bootstrapButton) bootstrapButton.style.display = canBootstrap && !window.isSuperAdmin ? 'block' : 'none';
 };
 
 const callableErrorCode = (error) => String(error?.code || '').replace(/^functions\//, '');
@@ -341,7 +351,7 @@ const callableErrorMessage = (error, fallback = '操作失敗，請稍後再試'
     if (code === 'unauthenticated') return '請先登入帳號';
     if (code === 'permission-denied') return '你沒有執行這項操作的權限';
     if (code === 'already-exists') return '你已領取過這個活動的點數';
-    if (code === 'not-found') return '找不到這個 QR code';
+    if (code === 'not-found') return error?.message || '找不到指定資料';
     if (code === 'deadline-exceeded') return '這個 QR code 已過期';
     if (code === 'unavailable') return '目前無法連上伺服器，請檢查網路後再試';
     return error?.message || fallback;
@@ -360,7 +370,7 @@ const handleAuthenticatedUser = async (user) => {
         try {
             const response = await callGetMyProfile();
             const result = response.data || {};
-            setAdminState(result.isAdmin);
+            setAdminState(result.isAdmin, result.isSuperAdmin, result.canBootstrapSuperAdmin);
             if (result.profile) {
                 const data = result.profile;
                 userData = {
@@ -407,6 +417,7 @@ onAuthStateChanged(auth, async (user) => {
             await handleAuthenticatedUser(user);
         } else {
             console.log('No authenticated user, showing login view');
+            setAdminState(false);
             activateView('view-login');
             setMainNavVisible(false);
         }
@@ -418,6 +429,16 @@ onAuthStateChanged(auth, async (user) => {
         // 無論結果如何，500ms 後關閉載入畫面，避免卡死
         if (loading) setTimeout(() => { loading.style.display = 'none'; }, 500);
     }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const accessError = sessionStorage.getItem('adminAccessError');
+    if (!accessError) return;
+    sessionStorage.removeItem('adminAccessError');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('adminError');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    setTimeout(() => window.showToast(accessError), 600);
 });
 
 // ========== 帳號相關 ==========
@@ -547,6 +568,27 @@ window.logout = () => {
     activateView('view-login');
     setMainNavVisible(false);
     if (window.showToast) window.showToast('已登出，歡迎下次再來！');
+};
+
+window.bootstrapSuperAdmin = async () => {
+    if (!currentUser || window.isGuestMode) {
+        if (window.showToast) window.showToast('請先使用指定的 Google 帳號登入');
+        return;
+    }
+
+    const button = document.getElementById('bootstrap-admin-btn');
+    if (button) button.disabled = true;
+    try {
+        const response = await callBootstrapSuperAdmin();
+        await currentUser.getIdToken(true);
+        setAdminState(response.data?.isAdmin, response.data?.isSuperAdmin, false);
+        if (window.showToast) window.showToast('管理員後台已啟用');
+    } catch (error) {
+        console.error('啟用管理員後台失敗:', error);
+        if (window.showToast) window.showToast(callableErrorMessage(error, '無法啟用管理員後台'));
+    } finally {
+        if (button) button.disabled = false;
+    }
 };
 
 window.loginAsGuest = async () => {
@@ -1206,6 +1248,114 @@ window.toggleCampaign = async (campaignId, active) => {
     }
 };
 
+// ========== 管理員角色管理 ==========
+let selectedAdminUser = null;
+
+const renderAdminUser = (user) => {
+    const container = document.getElementById('admin-user-result');
+    if (!container) return;
+    if (!user) {
+        container.innerHTML = '';
+        return;
+    }
+    const roleLabel = user.isAdmin ? '管理員' : '一般使用者';
+    const actionDisabled = user.isSuperAdmin || user.disabled;
+    const actionLabel = user.isAdmin ? '撤銷管理員' : '設為管理員';
+    container.innerHTML = `
+        <div class="campaign-item role-user-item">
+            <div class="campaign-item-heading">
+                <div>
+                    <div class="campaign-title">${escapeHtml(user.displayName || user.email)}</div>
+                    <div class="campaign-meta">${escapeHtml(user.email)}<br>${escapeHtml(roleLabel)}${user.disabled ? '・帳號已停用' : ''}</div>
+                </div>
+                <span class="campaign-status ${user.isAdmin ? 'active' : ''}">${escapeHtml(roleLabel)}</span>
+            </div>
+            <div class="campaign-actions">
+                <button class="small-action-btn" onclick="window.setSelectedAdminRole(${!user.isAdmin})" ${actionDisabled ? 'disabled' : ''}>${actionLabel}</button>
+            </div>
+        </div>`;
+};
+
+window.openAdminRoleView = () => {
+    if (!window.isSuperAdmin) {
+        window.showToast('你沒有管理管理員的權限');
+        return;
+    }
+    selectedAdminUser = null;
+    renderAdminUser(null);
+    setMainNavVisible(false);
+    activateView('view-admin-roles');
+    window.loadAdminUsers();
+};
+
+window.lookupAdminUser = async () => {
+    if (!window.isSuperAdmin) return;
+    const input = document.getElementById('admin-user-email');
+    const email = input.value.trim();
+    if (!email) return window.showToast('請輸入電子郵件');
+    const button = document.getElementById('lookup-admin-user-btn');
+    button.disabled = true;
+    try {
+        const response = await callLookupAdminUser({email});
+        selectedAdminUser = response.data;
+        renderAdminUser(selectedAdminUser);
+    } catch (error) {
+        selectedAdminUser = null;
+        renderAdminUser(null);
+        window.showToast(callableErrorMessage(error, '查詢使用者失敗'));
+    } finally {
+        button.disabled = false;
+    }
+};
+
+window.setSelectedAdminRole = async (admin) => {
+    if (!window.isSuperAdmin || !selectedAdminUser?.email) return;
+    if (!admin && !window.confirm(`確定要撤銷 ${selectedAdminUser.email} 的管理員權限嗎？`)) return;
+    try {
+        const response = await callSetAdminRole({email: selectedAdminUser.email, admin});
+        selectedAdminUser = response.data;
+        renderAdminUser(selectedAdminUser);
+        window.showToast(admin
+            ? '已授予管理員權限，請通知對方登出後重新登入'
+            : '已撤銷管理員權限，最慢會在登入憑證更新後生效');
+        await window.loadAdminUsers();
+    } catch (error) {
+        window.showToast(callableErrorMessage(error, '更新管理員權限失敗'));
+    }
+};
+
+window.loadAdminUsers = async () => {
+    if (!window.isSuperAdmin) return;
+    const list = document.getElementById('admin-user-list');
+    list.innerHTML = '<p class="empty-history">正在載入管理員⋯⋯</p>';
+    try {
+        const response = await callListAdminUsers();
+        const users = Array.isArray(response.data) ? response.data : [];
+        list.innerHTML = users.length ? users.map(user => {
+            const roleLabel = '管理員';
+            return `
+                <div class="campaign-item role-user-item">
+                    <div class="campaign-item-heading">
+                        <div>
+                            <div class="campaign-title">${escapeHtml(user.displayName || user.email)}</div>
+                            <div class="campaign-meta">${escapeHtml(user.email)}</div>
+                        </div>
+                        <span class="campaign-status active">${escapeHtml(roleLabel)}</span>
+                    </div>
+                    ${user.isSuperAdmin ? '' : `<div class="campaign-actions"><button class="small-action-btn role-manage-btn" data-email="${escapeHtml(user.email)}">管理權限</button></div>`}
+                </div>`;
+        }).join('') : '<p class="empty-history">目前沒有其他管理員。</p>';
+        list.querySelectorAll('.role-manage-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                document.getElementById('admin-user-email').value = button.dataset.email || '';
+                window.lookupAdminUser();
+            });
+        });
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '管理員列表載入失敗'))}</p>`;
+    }
+};
+
 // ========== 視圖切換 ==========
 window.navTo = (viewId, el) => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -1222,7 +1372,7 @@ window.switchView = (viewId) => {
     if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
         setActiveNavItem(viewId);
     }
-    if (['view-scanner', 'view-admin', 'view-login', 'view-setup'].includes(viewId)) {
+    if (['view-scanner', 'view-admin', 'view-admin-roles', 'view-login', 'view-setup'].includes(viewId)) {
         setMainNavVisible(false);
     } else if (userData) {
         setMainNavVisible(true);

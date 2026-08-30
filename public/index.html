@@ -101,7 +101,6 @@
                 <button class="main-btn btn-start" onclick="window.openQrScanner()">掃描活動 QR code</button>
                 <button class="main-btn btn-wish" onclick="window.switchView('view-challenge')">查看活動</button>
                 <button class="main-btn btn-wish"  onclick="window.showComingSoon()">許願池</button>
-                <button class="main-btn btn-admin" id="admin-entry-btn" onclick="window.openAdminView()" style="display:none;">QR code 管理</button>
             </div>
         </div>
 
@@ -296,47 +295,6 @@
             <button class="main-btn btn-start" id="restart-scanner-btn" onclick="window.startQrCamera()" style="display:none;">重新開啟相機</button>
             <label class="main-btn btn-wish scanner-upload-btn" for="qr-image-input">從相簿選擇 QR code</label>
             <input type="file" id="qr-image-input" accept="image/*" hidden>
-        </div>
-
-        <!-- ===== 管理員 QR code 管理 ===== -->
-        <div id="view-admin" class="view">
-            <div class="nav-bar">
-                <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回首頁</button>
-                <h2 style="font-size:18px;">QR code 管理</h2>
-            </div>
-            <div class="admin-card">
-                <h3>建立活動 QR code</h3>
-                <div class="form-group">
-                    <label for="admin-campaign-title">活動名稱</label>
-                    <input id="admin-campaign-title" type="text" maxlength="80" placeholder="例：午間永續野餐會">
-                </div>
-                <div class="form-group">
-                    <label for="admin-campaign-points">活動點數</label>
-                    <input id="admin-campaign-points" type="number" min="1" max="100" value="2">
-                </div>
-                <div class="form-group">
-                    <label for="admin-campaign-start">開始時間</label>
-                    <input id="admin-campaign-start" type="datetime-local">
-                </div>
-                <div class="form-group">
-                    <label for="admin-campaign-end">結束時間</label>
-                    <input id="admin-campaign-end" type="datetime-local">
-                </div>
-                <button class="main-btn btn-start" id="create-campaign-btn" onclick="window.createQrCampaign()">建立 QR code</button>
-            </div>
-            <div class="admin-card qr-preview-card" id="qr-preview-card" style="display:none;">
-                <h3 id="qr-preview-title">活動 QR code</h3>
-                <div id="qr-preview-image" class="qr-preview-image"></div>
-                <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
-                <button class="main-btn btn-wish" onclick="window.downloadCurrentQr()">下載 SVG</button>
-            </div>
-            <div class="admin-card">
-                <div class="admin-list-heading">
-                    <h3>活動列表</h3>
-                    <button class="small-action-btn" onclick="window.loadQrCampaigns()">重新整理</button>
-                </div>
-                <div id="admin-campaign-list"><p class="empty-history">尚未載入活動。</p></div>
-            </div>
         </div>
 
     </div><!-- /view-container -->

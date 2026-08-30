@@ -1,5 +1,6 @@
 import {randomBytes} from "node:crypto";
 import {initializeApp} from "firebase-admin/app";
+import {getAuth, UserRecord} from "firebase-admin/auth";
 import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
@@ -16,8 +17,10 @@ setGlobalOptions({
 });
 
 const db = getFirestore();
+const adminAuth = getAuth();
 const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
 const publicAppUrl = process.env.PUBLIC_APP_URL || "https://coespark-a3f6e.web.app";
+const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
 const callableOptions = {enforceAppCheck};
 
 type AuthenticatedRequest<T = unknown> = CallableRequest<T> & {
@@ -47,9 +50,57 @@ function requireAuth<T>(request: CallableRequest<T>): asserts request is Authent
 
 function requireAdmin<T>(request: CallableRequest<T>): asserts request is AuthenticatedRequest<T> {
   requireAuth(request);
-  if (request.auth.token.admin !== true) {
+  if (request.auth.token.admin !== true && request.auth.token.superAdmin !== true) {
     throw new HttpsError("permission-denied", "你沒有管理員權限");
   }
+}
+
+function adminFlags(token: Record<string, unknown>) {
+  const isSuperAdmin = token.superAdmin === true;
+  return {
+    isAdmin: token.admin === true || isSuperAdmin,
+    isSuperAdmin,
+  };
+}
+
+function canBootstrapSuperAdmin(token: Record<string, unknown>) {
+  const email = typeof token.email === "string" ? token.email.toLowerCase() : "";
+  return Boolean(initialSuperAdminEmail) &&
+    token.email_verified === true &&
+    email === initialSuperAdminEmail &&
+    token.superAdmin !== true;
+}
+
+function requiredEmail(value: unknown): string {
+  const email = requiredText(value, "電子郵件", 254).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpsError("invalid-argument", "電子郵件格式不正確");
+  }
+  return email;
+}
+
+async function getUserByEmail(email: string): Promise<UserRecord> {
+  try {
+    return await adminAuth.getUserByEmail(email);
+  } catch (error) {
+    if ((error as {code?: string})?.code === "auth/user-not-found") {
+      throw new HttpsError("not-found", "找不到這個使用者，請確認對方已登入過網站");
+    }
+    throw error;
+  }
+}
+
+function adminUserSummary(user: UserRecord) {
+  const claims = user.customClaims ?? {};
+  const isSuperAdmin = claims.superAdmin === true;
+  return {
+    uid: user.uid,
+    email: user.email ?? "",
+    displayName: user.displayName ?? "",
+    disabled: user.disabled,
+    isAdmin: claims.admin === true || isSuperAdmin,
+    isSuperAdmin,
+  };
 }
 
 function numberOrZero(value: unknown): number {
@@ -138,16 +189,63 @@ async function rewardHistory(uid: string) {
 
 export const getMyProfile = onCall(callableOptions, async (request) => {
   requireAuth(request);
+  const roles = adminFlags(request.auth.token);
+  const bootstrapEligible = canBootstrapSuperAdmin(request.auth.token);
   const profile = await loadAndMigrateProfile(request.auth.uid, request.auth.token.email);
-  if (!profile) return {profile: null, isAdmin: request.auth.token.admin === true};
+  if (!profile) return {profile: null, ...roles, canBootstrapSuperAdmin: bootstrapEligible};
   const storedHistory = await rewardHistory(request.auth.uid);
   return {
     profile: {
       ...profile,
       history: [...storedHistory, ...profile.legacyHistory],
     },
-    isAdmin: request.auth.token.admin === true,
+    ...roles,
+    canBootstrapSuperAdmin: bootstrapEligible,
   };
+});
+
+export const bootstrapSuperAdmin = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  if (!canBootstrapSuperAdmin(request.auth.token)) {
+    throw new HttpsError("permission-denied", "這個帳號不能啟用管理員權限");
+  }
+
+  const email = String(request.auth.token.email).toLowerCase();
+  const bootstrapRef = db.doc("systemConfig/adminBootstrap");
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(bootstrapRef);
+    if (snapshot.exists && snapshot.data()?.uid !== request.auth.uid) {
+      throw new HttpsError("failed-precondition", "第一位管理員已完成初始化");
+    }
+    transaction.set(bootstrapRef, {
+      uid: request.auth.uid,
+      email,
+      createdAt: snapshot.data()?.createdAt ?? FieldValue.serverTimestamp(),
+      completed: false,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+  });
+
+  const user = await adminAuth.getUser(request.auth.uid);
+  await adminAuth.setCustomUserClaims(user.uid, {
+    ...(user.customClaims ?? {}),
+    admin: true,
+    superAdmin: true,
+  });
+  await bootstrapRef.set({
+    completed: true,
+    completedAt: FieldValue.serverTimestamp(),
+  }, {merge: true});
+  await db.collection("adminAuditLogs").add({
+    action: "bootstrap_super_admin",
+    actorUid: request.auth.uid,
+    actorEmail: email,
+    targetUid: request.auth.uid,
+    targetEmail: email,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return {isAdmin: true, isSuperAdmin: true};
 });
 
 export const saveProfile = onCall(callableOptions, async (request) => {
@@ -382,4 +480,72 @@ export const setQrCampaignStatus = onCall(callableOptions, async (request) => {
     updatedBy: request.auth.uid,
   });
   return {id: campaignId, active: request.data.active};
+});
+
+export const lookupAdminUser = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const email = requiredEmail(request.data?.email);
+  return adminUserSummary(await getUserByEmail(email));
+});
+
+export const listAdminUsers = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const users: ReturnType<typeof adminUserSummary>[] = [];
+  let pageToken: string | undefined;
+  let pagesRead = 0;
+  do {
+    const page = await adminAuth.listUsers(1000, pageToken);
+    users.push(...page.users
+      .filter((user) => user.customClaims?.admin === true || user.customClaims?.superAdmin === true)
+      .map(adminUserSummary));
+    pageToken = page.pageToken;
+    pagesRead += 1;
+  } while (pageToken && pagesRead < 10);
+
+  return users.sort((a, b) => Number(b.isSuperAdmin) - Number(a.isSuperAdmin) ||
+    a.email.localeCompare(b.email));
+});
+
+export const listUsers = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const page = await adminAuth.listUsers(1000);
+  return page.users
+    .map(adminUserSummary)
+    .sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.email.localeCompare(b.email));
+});
+
+export const setAdminRole = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const email = requiredEmail(request.data?.email);
+  if (typeof request.data?.admin !== "boolean") {
+    throw new HttpsError("invalid-argument", "管理員狀態格式不正確");
+  }
+
+  const target = await getUserByEmail(email);
+  const targetClaims = {...(target.customClaims ?? {})};
+  if (targetClaims.superAdmin === true && request.data.admin !== true) {
+    throw new HttpsError("failed-precondition", "受保護的初始管理員不能在此頁撤銷");
+  }
+  if (target.uid === request.auth.uid && request.data.admin !== true) {
+    throw new HttpsError("failed-precondition", "不能撤銷自己的管理員權限");
+  }
+
+  if (request.data.admin) {
+    targetClaims.admin = true;
+  } else {
+    delete targetClaims.admin;
+  }
+  await adminAuth.setCustomUserClaims(target.uid, targetClaims);
+
+  await db.collection("adminAuditLogs").add({
+    action: request.data.admin ? "grant_admin" : "revoke_admin",
+    actorUid: request.auth.uid,
+    actorEmail: request.auth.token.email ?? "",
+    targetUid: target.uid,
+    targetEmail: target.email ?? email,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  const updated = await adminAuth.getUser(target.uid);
+  return adminUserSummary(updated);
 });

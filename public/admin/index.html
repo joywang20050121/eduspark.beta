@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="firebase-app-check-site-key" content="">
+    <title>教院小火花｜管理後台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css?v=8">
+    <link rel="stylesheet" href="/admin/admin.css?v=2">
+</head>
+<body class="admin-page">
+    <div id="toast" role="status" aria-live="polite">提示訊息</div>
+
+    <div id="admin-loading" class="admin-loading">
+        <div class="spinner"></div>
+        <p>正在確認管理員權限⋯⋯</p>
+    </div>
+
+    <main id="admin-login" class="admin-login" hidden>
+        <img src="/spark1.png" alt="教院小火花">
+        <p class="admin-kicker">COE SPARK</p>
+        <h1>管理員登入</h1>
+        <p>請使用已取得管理員權限的 Google 帳號登入。</p>
+        <button id="google-admin-login" class="admin-primary-button">使用 Google 帳號登入</button>
+        <a href="/" class="admin-text-link">返回教院小火花</a>
+    </main>
+
+    <div id="admin-dashboard" class="admin-shell" hidden>
+        <aside class="admin-sidebar">
+            <a href="/admin/users" class="admin-brand" data-admin-route="/admin/users">
+                <img src="/spark1.png" alt="">
+                <span>教院小火花<small>管理後台</small></span>
+            </a>
+            <nav class="admin-nav" aria-label="管理後台功能">
+                <a href="/admin/users" data-admin-route="/admin/users">
+                    <span class="admin-nav-index">01</span>
+                    <span>使用者與權限</span>
+                </a>
+                <a href="/admin/qr" data-admin-route="/admin/qr">
+                    <span class="admin-nav-index">02</span>
+                    <span>QR code</span>
+                </a>
+                <a href="/admin/wishes" data-admin-route="/admin/wishes">
+                    <span class="admin-nav-index">03</span>
+                    <span>許願池</span>
+                </a>
+            </nav>
+            <div class="admin-sidebar-footer">
+                <p id="admin-account" class="admin-account"></p>
+                <a href="/">返回首頁</a>
+                <button id="admin-logout">登出</button>
+            </div>
+        </aside>
+
+        <main class="admin-content">
+        <header class="admin-header">
+            <div>
+                <p class="admin-kicker">COE SPARK</p>
+                <h1 id="admin-page-title">使用者與權限</h1>
+            </div>
+        </header>
+
+        <section id="admin-qr" class="admin-section" data-admin-view="/admin/qr" hidden>
+            <div class="admin-section-heading">
+                <div>
+                    <p class="admin-kicker">QR CAMPAIGNS</p>
+                    <h2>活動 QR code</h2>
+                </div>
+                <button id="refresh-campaigns" class="small-action-btn">重新整理</button>
+            </div>
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <h3>建立活動</h3>
+                    <div class="form-group">
+                        <label for="admin-campaign-title">活動名稱</label>
+                        <input id="admin-campaign-title" type="text" maxlength="80" placeholder="例：午間永續野餐會">
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-campaign-points">活動點數</label>
+                        <input id="admin-campaign-points" type="number" min="1" max="100" value="2">
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-campaign-start">開始時間</label>
+                        <input id="admin-campaign-start" type="datetime-local">
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-campaign-end">結束時間</label>
+                        <input id="admin-campaign-end" type="datetime-local">
+                    </div>
+                    <button id="create-campaign" class="admin-primary-button">建立 QR code</button>
+                </div>
+                <div class="admin-card">
+                    <h3>活動列表</h3>
+                    <div id="admin-campaign-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
+                </div>
+            </div>
+            <div class="admin-card qr-preview-card" id="qr-preview-card" hidden>
+                <h3 id="qr-preview-title">活動 QR code</h3>
+                <div id="qr-preview-image" class="qr-preview-image"></div>
+                <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
+                <button id="download-qr" class="admin-primary-button">下載 SVG</button>
+            </div>
+        </section>
+
+        <section id="admin-users" class="admin-section" data-admin-view="/admin/users" hidden>
+            <div class="admin-section-heading">
+                <div>
+                    <p class="admin-kicker">ACCESS CONTROL</p>
+                    <h2>管理員權限</h2>
+                </div>
+                <button id="refresh-admins" class="small-action-btn">重新整理</button>
+            </div>
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <h3>查詢使用者</h3>
+                    <p class="admin-help">使用者必須先登入網站一次，才能被設為管理員。</p>
+                    <div class="form-group">
+                        <label for="admin-user-email">使用者電子郵件</label>
+                        <input id="admin-user-email" type="email" maxlength="254" autocomplete="off" placeholder="user@example.com">
+                    </div>
+                    <button id="lookup-admin-user" class="admin-primary-button">查詢使用者</button>
+                    <div id="admin-user-result"></div>
+                </div>
+                <div class="admin-card">
+                    <h3>使用者列表</h3>
+                    <div id="admin-user-list"><p class="empty-history">正在載入管理員⋯⋯</p></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="admin-wishes" class="admin-section" data-admin-view="/admin/wishes" hidden>
+            <div class="admin-section-heading">
+                <div>
+                    <p class="admin-kicker">WISHING POOL</p>
+                    <h2>許願池</h2>
+                </div>
+            </div>
+            <div class="admin-card admin-placeholder">
+                <span class="admin-placeholder-index">03</span>
+                <h3>許願池管理功能預留區</h3>
+                <p>這個 route 已經建立完成，後續可以在此加入願望瀏覽、審核、分類與狀態管理。</p>
+            </div>
+        </section>
+        </main>
+    </div>
+
+    <script type="module" src="/admin/admin.js?v=2"></script>
+</body>
+</html>

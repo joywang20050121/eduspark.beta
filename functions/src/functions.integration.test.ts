@@ -33,13 +33,18 @@ type TestClient = {
   createQrCampaign: ReturnType<typeof httpsCallable>;
   listQrCampaigns: ReturnType<typeof httpsCallable>;
   setQrCampaignStatus: ReturnType<typeof httpsCallable>;
+  lookupAdminUser: ReturnType<typeof httpsCallable>;
+  listAdminUsers: ReturnType<typeof httpsCallable>;
+  listUsers: ReturnType<typeof httpsCallable>;
+  setAdminRole: ReturnType<typeof httpsCallable>;
+  bootstrapSuperAdmin: ReturnType<typeof httpsCallable>;
 };
 
 let testEnvironment: RulesTestEnvironment;
 const clients: TestClient[] = [];
 const adminApp = initializeAdminApp({projectId: "demo-eduspark"}, "integration-tests");
 
-async function createClient(name: string, isAdmin = false): Promise<TestClient> {
+async function createClient(name: string, isAdmin = false, isSuperAdmin = false): Promise<TestClient> {
   const app = initializeApp({
     apiKey: "demo-key",
     projectId: "demo-eduspark",
@@ -50,8 +55,11 @@ async function createClient(name: string, isAdmin = false): Promise<TestClient> 
   const functions = getFunctions(app, "asia-east1");
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
   await createUserWithEmailAndPassword(auth, `${name}@example.com`, "testing1234");
-  if (isAdmin) {
-    await getAdminAuth(adminApp).setCustomUserClaims(auth.currentUser!.uid, {admin: true});
+  if (isAdmin || isSuperAdmin) {
+    await getAdminAuth(adminApp).setCustomUserClaims(auth.currentUser!.uid, {
+      admin: isAdmin,
+      superAdmin: isSuperAdmin,
+    });
     await auth.currentUser!.getIdToken(true);
   }
   const client = {
@@ -63,6 +71,11 @@ async function createClient(name: string, isAdmin = false): Promise<TestClient> 
     createQrCampaign: httpsCallable(functions, "createQrCampaign"),
     listQrCampaigns: httpsCallable(functions, "listQrCampaigns"),
     setQrCampaignStatus: httpsCallable(functions, "setQrCampaignStatus"),
+    lookupAdminUser: httpsCallable(functions, "lookupAdminUser"),
+    listAdminUsers: httpsCallable(functions, "listAdminUsers"),
+    listUsers: httpsCallable(functions, "listUsers"),
+    setAdminRole: httpsCallable(functions, "setAdminRole"),
+    bootstrapSuperAdmin: httpsCallable(functions, "bootstrapSuperAdmin"),
   };
   clients.push(client);
   return client;
@@ -169,5 +182,77 @@ describe("管理員 QR code 管理", () => {
 
     const disabled = await client.setQrCampaignStatus({campaignId: campaign.id, active: false});
     assert.deepEqual(disabled.data, {id: campaign.id, active: false});
+  });
+});
+
+describe("管理員權限管理", () => {
+  test("只有設定且已驗證的帳號能初始化第一位管理員", async () => {
+    const regular = await createClient("kate");
+    await assert.rejects(() => regular.bootstrapSuperAdmin(),
+      (error: {code?: string}) => error.code === "functions/permission-denied");
+
+    const bootstrap = await createClient("bootstrap");
+    await getAdminAuth(adminApp).updateUser(bootstrap.auth.currentUser!.uid, {
+      emailVerified: true,
+    });
+    await bootstrap.auth.currentUser!.getIdToken(true);
+    const result = await bootstrap.bootstrapSuperAdmin();
+    assert.deepEqual(result.data, {isAdmin: true, isSuperAdmin: true});
+    await bootstrap.auth.currentUser!.getIdToken(true);
+
+    const campaign = await bootstrap.createQrCampaign({
+      title: "初始化後可管理活動",
+      points: 1,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    });
+    assert.ok((campaign.data as {id?: string}).id);
+  });
+
+  test("管理員可以授予其他人管理員權限", async () => {
+    const target = await createClient("frank");
+    const admin = await createClient("grace", true);
+    const result = await admin.setAdminRole({
+      email: target.auth.currentUser!.email,
+      admin: true,
+    });
+    assert.equal((result.data as {isAdmin: boolean}).isAdmin, true);
+    const users = await admin.listUsers();
+    assert.ok((users.data as Array<{email: string}>).some((user) =>
+      user.email === target.auth.currentUser!.email));
+  });
+
+  test("管理員可以查詢、授權與撤銷管理員", async () => {
+    const target = await createClient("heidi");
+    const superAdmin = await createClient("ivan", true, true);
+    const email = target.auth.currentUser!.email!;
+
+    const initial = await superAdmin.lookupAdminUser({email});
+    assert.equal((initial.data as {isAdmin: boolean}).isAdmin, false);
+
+    const granted = await superAdmin.setAdminRole({email, admin: true});
+    assert.equal((granted.data as {isAdmin: boolean}).isAdmin, true);
+    await target.auth.currentUser!.getIdToken(true);
+
+    const listed = await superAdmin.listAdminUsers();
+    assert.ok((listed.data as Array<{email: string}>).some((user) => user.email === email));
+
+    const revoked = await superAdmin.setAdminRole({email, admin: false});
+    assert.equal((revoked.data as {isAdmin: boolean}).isAdmin, false);
+    await target.auth.currentUser!.getIdToken(true);
+    await assert.rejects(() => target.createQrCampaign({
+      title: "撤權後不可建立",
+      points: 1,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
+  });
+
+  test("初始保護帳號不能從介面撤銷自己", async () => {
+    const superAdmin = await createClient("judy", true, true);
+    await assert.rejects(() => superAdmin.setAdminRole({
+      email: superAdmin.auth.currentUser!.email,
+      admin: false,
+    }), (error: {code?: string}) => error.code === "functions/failed-precondition");
   });
 });

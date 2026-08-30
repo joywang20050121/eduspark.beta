@@ -852,3 +852,17 @@ button:active { transform: scale(0.97) !important; }
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
+
+.role-admin-help {
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.role-user-item .campaign-meta {
+    overflow-wrap: anywhere;
+}
+
+.role-user-item .small-action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}

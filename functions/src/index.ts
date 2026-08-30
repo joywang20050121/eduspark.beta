@@ -17,7 +17,7 @@ setGlobalOptions({
 
 const db = getFirestore();
 const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
-const publicAppUrl = process.env.PUBLIC_APP_URL || "https://edu-spark2026.web.app";
+const publicAppUrl = process.env.PUBLIC_APP_URL || "https://coespark-a3f6e.web.app";
 const callableOptions = {enforceAppCheck};
 
 type AuthenticatedRequest<T = unknown> = CallableRequest<T> & {

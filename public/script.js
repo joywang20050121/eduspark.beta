@@ -15,20 +15,21 @@ import {
 
 // ========== Firebase 初始化 ==========
 const firebaseHostingDomains = new Set([
-    "edu-spark2026.firebaseapp.com",
-    "edu-spark2026.web.app"
+    "coespark-a3f6e.firebaseapp.com",
+    "coespark-a3f6e.web.app"
 ]);
 const authDomain = firebaseHostingDomains.has(window.location.hostname)
     ? window.location.hostname
-    : "edu-spark2026.firebaseapp.com";
+    : "coespark-a3f6e.firebaseapp.com";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBrKv83q_URyL2QpWogPqh-4ebZ-GNJ5Js",
+    apiKey: "AIzaSyD4tdUd6o06zxMyyOq8CwyZuixrIh5j0Kk",
     authDomain,
-    projectId: "edu-spark2026",
-    storageBucket: "edu-spark2026.firebasestorage.app",
-    messagingSenderId: "803298416028",
-    appId: "1:803298416028:web:18879dec8e1e8db1596459"
+    projectId: "coespark-a3f6e",
+    storageBucket: "coespark-a3f6e.firebasestorage.app",
+    messagingSenderId: "495581170629",
+    appId: "1:495581170629:web:aba68ff657942cf77b99ac",
+    measurementId: "G-7WB0WT0QP1"
 };
 
 const app      = initializeApp(firebaseConfig);
@@ -904,8 +905,8 @@ const extractCampaignId = (value) => {
         const url = new URL(rawValue);
         const allowedHosts = new Set([
             window.location.hostname,
-            'edu-spark2026.web.app',
-            'edu-spark2026.firebaseapp.com'
+            'coespark-a3f6e.web.app',
+            'coespark-a3f6e.firebaseapp.com'
         ]);
         if (!allowedHosts.has(url.hostname)) return null;
         const campaignId = url.searchParams.get('redeem') || '';

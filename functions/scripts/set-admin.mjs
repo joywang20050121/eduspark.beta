@@ -8,7 +8,7 @@ if (!email) {
 } else {
   initializeApp({
     credential: applicationDefault(),
-    projectId: process.env.GCLOUD_PROJECT || "edu-spark2026",
+    projectId: process.env.GCLOUD_PROJECT || "coespark-a3f6e",
   });
   const auth = getAuth();
   const user = await auth.getUserByEmail(email);

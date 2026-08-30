@@ -6,3 +6,8 @@ ui-debug.log
 functions/lib/
 functions/node_modules/
 functions/.env.local
+/node_modules/
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+gha-creds-*.json

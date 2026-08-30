@@ -40,6 +40,16 @@ beforeEach(async () => {
       uid: "alice",
       points: 2,
     });
+    await setDoc(doc(database, "wishes/wish_one"), {
+      message: "希望多辦活動",
+      anonymous: false,
+      authorUid: "alice",
+    });
+    await setDoc(doc(database, "announcements/announcement_one"), {
+      title: "測試公告",
+      content: "公告內容",
+      published: true,
+    });
   });
 });
 
@@ -95,6 +105,35 @@ describe("QR code 兌換紀錄", () => {
     await assertFails(setDoc(doc(database, "qrRedemptions/fake_alice"), {
       uid: "alice",
       points: 100,
+    }));
+  });
+});
+
+describe("許願池資料", () => {
+  test("使用者不能略過 Functions 直接讀寫留言", async () => {
+    const database = testEnvironment.authenticatedContext("alice").firestore();
+    await assertFails(getDoc(doc(database, "wishes/wish_one")));
+    await assertFails(setDoc(doc(database, "wishes/fake_wish"), {
+      message: "偽造留言",
+      anonymous: true,
+      authorUid: "alice",
+    }));
+  });
+
+  test("管理員也必須透過 Functions 刪除留言", async () => {
+    const database = testEnvironment.authenticatedContext("admin", {admin: true}).firestore();
+    await assertFails(updateDoc(doc(database, "wishes/wish_one"), {message: "竄改留言"}));
+  });
+});
+
+describe("公佈欄資料", () => {
+  test("前端不能略過 Functions 直接讀寫公告", async () => {
+    const database = testEnvironment.authenticatedContext("alice").firestore();
+    await assertFails(getDoc(doc(database, "announcements/announcement_one")));
+    await assertFails(setDoc(doc(database, "announcements/fake_announcement"), {
+      title: "偽造公告",
+      content: "不應寫入",
+      published: true,
     }));
   });
 });

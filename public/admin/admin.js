@@ -1,5 +1,6 @@
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
+    connectAuthEmulator,
     getAuth,
     GoogleAuthProvider,
     onAuthStateChanged,
@@ -16,7 +17,8 @@ import {
     ReCaptchaEnterpriseProvider
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-check.js";
 
-const firebaseConfig = {
+const useLocalEmulators = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const productionFirebaseConfig = {
     apiKey: "AIzaSyD4tdUd6o06zxMyyOq8CwyZuixrIh5j0Kk",
     authDomain: "coespark-a3f6e.firebaseapp.com",
     projectId: "coespark-a3f6e",
@@ -25,6 +27,14 @@ const firebaseConfig = {
     appId: "1:495581170629:web:aba68ff657942cf77b99ac",
     measurementId: "G-7WB0WT0QP1"
 };
+const firebaseConfig = useLocalEmulators
+    ? {
+        ...productionFirebaseConfig,
+        authDomain: "demo-eduspark.firebaseapp.com",
+        projectId: "demo-eduspark",
+        storageBucket: "demo-eduspark.appspot.com"
+    }
+    : productionFirebaseConfig;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -32,7 +42,8 @@ const functions = getFunctions(app, "asia-east1");
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({prompt: "select_account"});
 
-if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+if (useLocalEmulators) {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", {disableWarnings: true});
     connectFunctionsEmulator(functions, "127.0.0.1", 5001);
 }
 
@@ -53,6 +64,12 @@ const callSetQrCampaignStatus = httpsCallable(functions, "setQrCampaignStatus");
 const callLookupAdminUser = httpsCallable(functions, "lookupAdminUser");
 const callListUsers = httpsCallable(functions, "listUsers");
 const callSetAdminRole = httpsCallable(functions, "setAdminRole");
+const callListWishes = httpsCallable(functions, "listWishes");
+const callDeleteWish = httpsCallable(functions, "deleteWish");
+const callListAnnouncements = httpsCallable(functions, "listAnnouncements");
+const callSaveAnnouncement = httpsCallable(functions, "saveAnnouncement");
+const callDeleteAnnouncement = httpsCallable(functions, "deleteAnnouncement");
+const callBatchAddPoints = httpsCallable(functions, "batchAddPoints");
 
 const loading = document.getElementById("admin-loading");
 const login = document.getElementById("admin-login");
@@ -60,6 +77,9 @@ const dashboard = document.getElementById("admin-dashboard");
 let currentQrDownload = null;
 let selectedAdminUser = null;
 let authorizationInProgress = false;
+let adminUsers = [];
+let adminWishes = [];
+const selectedPointUserIds = new Set();
 let toastTimeout;
 
 const escapeHtml = (value) => String(value ?? "")
@@ -115,6 +135,8 @@ const formatCampaignTime = (millis) => {
     }).format(new Date(millis));
 };
 
+const wishCategoryLabels = {suggestion: "建議", feedback: "回饋", curiosity: "好奇"};
+
 const initializeCampaignTimes = () => {
     const start = new Date();
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
@@ -125,7 +147,8 @@ const initializeCampaignTimes = () => {
 const adminRoutes = {
     "/admin/users": {title: "使用者與權限", load: () => loadAdminUsers()},
     "/admin/qr": {title: "QR code", load: () => loadQrCampaigns()},
-    "/admin/wishes": {title: "許願池", load: async () => {}}
+    "/admin/wishes": {title: "許願池", load: () => loadAdminWishes()},
+    "/admin/announcements": {title: "公佈欄", load: () => loadAnnouncements()}
 };
 
 const normalizeAdminRoute = (path) => {
@@ -164,6 +187,7 @@ const authorizeUser = async (user) => {
     loading.hidden = false;
     login.hidden = true;
     try {
+        await user.getIdToken(true);
         let profile = (await callGetMyProfile()).data || {};
         if (!profile.isAdmin && profile.canBootstrapSuperAdmin) {
             await callBootstrapSuperAdmin();
@@ -250,6 +274,7 @@ const loadQrCampaigns = async () => {
                     ${Number(campaign.points)} 點<br>
                     ${escapeHtml(formatCampaignTime(campaign.startsAt))}～${escapeHtml(formatCampaignTime(campaign.endsAt))}
                 </div>
+                <p class="admin-wish-message">${escapeHtml(campaign.description || "尚無活動內文")}</p>
                 <div class="campaign-actions">
                     <button class="small-action-btn show-campaign-qr">查看 QR code</button>
                     <button class="small-action-btn toggle-campaign" data-active="${String(!campaign.active)}">${campaign.active ? "停用" : "重新啟用"}</button>
@@ -288,19 +313,21 @@ const loadQrCampaigns = async () => {
 
 document.getElementById("create-campaign").addEventListener("click", async (event) => {
     const title = document.getElementById("admin-campaign-title").value.trim();
+    const description = document.getElementById("admin-campaign-description").value.trim();
     const points = Number(document.getElementById("admin-campaign-points").value);
     const startsAt = new Date(document.getElementById("admin-campaign-start").value).getTime();
     const endsAt = new Date(document.getElementById("admin-campaign-end").value).getTime();
-    if (!title || !Number.isInteger(points) || !startsAt || !endsAt) {
-        showToast("請完整填寫活動名稱、點數與時間");
+    if (!title || !description || !Number.isInteger(points) || !startsAt || !endsAt) {
+        showToast("請完整填寫活動名稱、內文、點數與時間");
         return;
     }
     const button = event.currentTarget;
     button.disabled = true;
     try {
-        const response = await callCreateQrCampaign({title, points, startsAt, endsAt});
+        const response = await callCreateQrCampaign({title, description, points, startsAt, endsAt});
         showQrPreview(response.data);
         document.getElementById("admin-campaign-title").value = "";
+        document.getElementById("admin-campaign-description").value = "";
         showToast("活動 QR code 已建立");
         await loadQrCampaigns();
     } catch (error) {
@@ -378,7 +405,7 @@ const setSelectedAdminRole = async (admin) => {
             admin
         })).data;
         renderAdminUser(selectedAdminUser);
-        showToast(admin ? "已授予管理員權限，請通知對方重新登入" : "已撤銷管理員權限");
+        showToast(admin ? "已授予管理員權限，對方重新開啟後台即可生效" : "已撤銷管理員權限");
         await loadAdminUsers();
     } catch (error) {
         showToast(callableErrorMessage(error, "更新管理員權限失敗"));
@@ -390,17 +417,20 @@ const loadAdminUsers = async () => {
     list.innerHTML = '<p class="empty-history">正在載入管理員⋯⋯</p>';
     try {
         const response = await callListUsers();
-        const users = Array.isArray(response.data) ? response.data : [];
-        list.innerHTML = users.length ? users.map((user) => `
-            <div class="campaign-item role-user-item" data-email="${escapeHtml(user.email)}">
+        adminUsers = Array.isArray(response.data) ? response.data : [];
+        selectedPointUserIds.clear();
+        updateSelectedUserCount();
+        list.innerHTML = adminUsers.length ? adminUsers.map((user) => `
+            <div class="campaign-item role-user-item" data-email="${escapeHtml(user.email)}" data-uid="${escapeHtml(user.uid)}">
                 <div class="campaign-item-heading">
+                    ${user.realName ? `<input class="point-user-checkbox" type="checkbox" aria-label="選擇 ${escapeHtml(user.realName || user.email)}">` : ''}
                     <div>
-                        <div class="campaign-title">${escapeHtml(user.displayName || user.email)}</div>
-                        <div class="campaign-meta">${escapeHtml(user.email)}</div>
+                        <div class="campaign-title">${escapeHtml(user.nickname || user.displayName || user.email)}</div>
+                        <div class="campaign-meta">${escapeHtml(user.email)}・${Number(user.points || 0)} 點</div>
                     </div>
                     <span class="campaign-status ${user.isAdmin ? "active" : ""}">${user.isAdmin ? "管理員" : "一般使用者"}</span>
                 </div>
-                ${user.isSuperAdmin ? "" : '<div class="campaign-actions"><button class="small-action-btn manage-role">管理權限</button></div>'}
+                <div class="campaign-actions"><button class="small-action-btn view-user-detail">查看詳情</button>${user.isSuperAdmin ? "" : '<button class="small-action-btn manage-role">管理權限</button>'}</div>
             </div>
         `).join("") : '<p class="empty-history">目前沒有使用者。</p>';
         list.querySelectorAll(".manage-role").forEach((button) => {
@@ -409,10 +439,291 @@ const loadAdminUsers = async () => {
                 lookupAdminUser();
             });
         });
+        list.querySelectorAll(".view-user-detail").forEach((button) => {
+            button.addEventListener("click", () => showUserDetail(button.closest("[data-uid]").dataset.uid));
+        });
+        list.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
+            checkbox.addEventListener("change", () => {
+                const uid = checkbox.closest("[data-uid]").dataset.uid;
+                if (checkbox.checked) selectedPointUserIds.add(uid); else selectedPointUserIds.delete(uid);
+                updateSelectedUserCount();
+            });
+        });
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "管理員列表載入失敗"))}</p>`;
     }
 };
+
+const updateSelectedUserCount = () => {
+    const count = document.getElementById("selected-user-count");
+    if (count) count.textContent = `已選擇 ${selectedPointUserIds.size} 位使用者`;
+};
+
+const showUserDetail = (uid) => {
+    const user = adminUsers.find((item) => item.uid === uid);
+    if (!user) return;
+    const detail = document.getElementById("admin-user-detail");
+    detail.hidden = false;
+    detail.innerHTML = `
+        <div class="admin-inline-heading"><h3>使用者詳細資料</h3><button class="small-action-btn close-user-detail">關閉</button></div>
+        <dl class="user-detail-grid">
+            <div><dt>真實姓名</dt><dd>${escapeHtml(user.realName || "尚未建立個人檔案")}</dd></div>
+            <div><dt>公開暱稱</dt><dd>${escapeHtml(user.nickname || "—")}</dd></div>
+            <div><dt>電子郵件</dt><dd>${escapeHtml(user.email)}</dd></div>
+            <div><dt>系級</dt><dd>${escapeHtml(user.dept || "—")}</dd></div>
+            <div><dt>目前／累積點數</dt><dd>${Number(user.points || 0)}／${Number(user.totalPoints || 0)}</dd></div>
+            <div><dt>自我介紹</dt><dd>${escapeHtml(user.bio || "—")}</dd></div>
+            <div><dt>最近登入</dt><dd>${escapeHtml(formatCampaignTime(user.lastSignInAt))}</dd></div>
+        </dl>`;
+    detail.querySelector(".close-user-detail").addEventListener("click", () => { detail.hidden = true; });
+    detail.scrollIntoView({behavior: "smooth", block: "start"});
+};
+
+document.getElementById("batch-add-points").addEventListener("click", async (event) => {
+    const points = Number(document.getElementById("batch-points").value);
+    const reason = document.getElementById("batch-points-reason").value.trim();
+    if (!selectedPointUserIds.size) return showToast("請先勾選至少一位使用者");
+    if (!Number.isInteger(points) || points < 1 || points > 1000) return showToast("點數必須是 1 至 1000 的整數");
+    if (!reason) return showToast("請輸入新增積分的理由");
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+        const response = await callBatchAddPoints({userIds: [...selectedPointUserIds], points, reason});
+        showToast(`已為 ${response.data.updated} 位使用者新增 ${points} 點`);
+        document.getElementById("batch-points-reason").value = "";
+        await loadAdminUsers();
+    } catch (error) {
+        showToast(callableErrorMessage(error, "批次新增積分失敗"));
+    } finally {
+        button.disabled = false;
+    }
+});
+
+const formatWishTime = (millis) => {
+    if (!millis) return "未知時間";
+    return new Intl.DateTimeFormat("zh-TW", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    }).format(new Date(millis));
+};
+
+const loadAdminWishes = async () => {
+    const list = document.getElementById("admin-wish-list");
+    list.innerHTML = '<p class="empty-history">正在載入留言⋯⋯</p>';
+    try {
+        const response = await callListWishes();
+        const responseWishes = Array.isArray(response.data) ? response.data : [];
+        adminWishes = responseWishes;
+        renderAdminWishes();
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "留言列表載入失敗"))}</p>`;
+    }
+};
+
+const renderAdminWishes = () => {
+    const list = document.getElementById("admin-wish-list");
+    const filter = document.getElementById("admin-wish-filter").value;
+    const wishes = filter === "all" ? adminWishes : adminWishes.filter((wish) => wish.category === filter);
+    list.innerHTML = wishes.length ? wishes.map((wish) => `
+            <article class="campaign-item admin-wish-item" data-wish-id="${escapeHtml(wish.id)}">
+                <div class="campaign-item-heading">
+                    <div>
+                        <div class="campaign-title">${escapeHtml(wish.authorName)}</div>
+                        <div class="campaign-meta">${escapeHtml(formatWishTime(wish.createdAt))}</div>
+                    </div>
+                    <span class="campaign-status">${escapeHtml(wishCategoryLabels[wish.category] || "建議")}${wish.anonymous ? "・匿名" : ""}</span>
+                </div>
+                <p class="admin-wish-message">${escapeHtml(wish.message)}</p>
+                <div class="campaign-actions">
+                    <button type="button" class="small-action-btn delete-wish">刪除留言</button>
+                </div>
+            </article>
+        `).join("") : '<p class="empty-history">這個標籤目前沒有留言。</p>';
+};
+
+const announcementCategoryLabels = {
+    general: "重要公告",
+    event: "活動消息",
+    update: "功能更新",
+    reward: "兌換活動"
+};
+let adminAnnouncements = [];
+
+const resetAnnouncementForm = () => {
+    document.getElementById("announcement-id").value = "";
+    document.getElementById("announcement-title").value = "";
+    document.getElementById("announcement-category").value = "general";
+    document.getElementById("announcement-content").innerHTML = "";
+    document.getElementById("announcement-published").checked = true;
+    document.getElementById("announcement-form-title").textContent = "新增公告";
+    document.getElementById("save-announcement").textContent = "儲存公告";
+    document.getElementById("cancel-announcement-edit").hidden = true;
+};
+
+const editAnnouncement = (announcementId) => {
+    const announcement = adminAnnouncements.find((item) => item.id === announcementId);
+    if (!announcement) return;
+    document.getElementById("announcement-id").value = announcement.id;
+    document.getElementById("announcement-title").value = announcement.title;
+    document.getElementById("announcement-category").value = announcement.category;
+    document.getElementById("announcement-content").innerHTML = announcement.contentHtml || escapeHtml(announcement.content);
+    document.getElementById("announcement-published").checked = announcement.published;
+    document.getElementById("announcement-form-title").textContent = "編輯公告";
+    document.getElementById("save-announcement").textContent = "更新公告";
+    document.getElementById("cancel-announcement-edit").hidden = false;
+    document.getElementById("announcement-title").focus();
+};
+
+const loadAnnouncements = async () => {
+    const list = document.getElementById("admin-announcement-list");
+    list.innerHTML = '<p class="empty-history">正在載入公告⋯⋯</p>';
+    try {
+        const response = await callListAnnouncements();
+        adminAnnouncements = Array.isArray(response.data) ? response.data : [];
+        list.innerHTML = adminAnnouncements.length ? adminAnnouncements.map((announcement) => `
+            <article class="campaign-item admin-announcement-item" data-announcement-id="${escapeHtml(announcement.id)}">
+                <div class="campaign-item-heading">
+                    <div>
+                        <div class="campaign-title">${escapeHtml(announcement.title)}</div>
+                        <div class="campaign-meta">${escapeHtml(announcementCategoryLabels[announcement.category] || "重要公告")}・${escapeHtml(formatWishTime(announcement.updatedAt))}</div>
+                    </div>
+                    <span class="campaign-status ${announcement.published ? "active" : ""}">${announcement.published ? "已發佈" : "草稿"}</span>
+                </div>
+                <div class="admin-wish-message admin-rich-preview">${announcement.contentHtml || escapeHtml(announcement.content)}</div>
+                <div class="campaign-actions">
+                    <button type="button" class="small-action-btn edit-announcement">編輯</button>
+                    <button type="button" class="small-action-btn delete-announcement">刪除</button>
+                </div>
+            </article>
+        `).join("") : '<p class="empty-history">目前還沒有公告。</p>';
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "公告列表載入失敗"))}</p>`;
+    }
+};
+
+document.getElementById("save-announcement").addEventListener("click", async (event) => {
+    const id = document.getElementById("announcement-id").value;
+    const title = document.getElementById("announcement-title").value.trim();
+    const contentHtml = document.getElementById("announcement-content").innerHTML.trim();
+    const content = document.getElementById("announcement-content").innerText.trim();
+    const category = document.getElementById("announcement-category").value;
+    const published = document.getElementById("announcement-published").checked;
+    if (!title || !content) {
+        showToast("請填寫公告標題與內容");
+        return;
+    }
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+        await callSaveAnnouncement({id, title, contentHtml, category, published});
+        showToast(id ? "公告已更新" : published ? "公告已發佈" : "草稿已儲存");
+        resetAnnouncementForm();
+        await loadAnnouncements();
+    } catch (error) {
+        showToast(callableErrorMessage(error, "公告儲存失敗"));
+    } finally {
+        button.disabled = false;
+    }
+});
+
+document.getElementById("cancel-announcement-edit").addEventListener("click", resetAnnouncementForm);
+
+document.querySelectorAll(".wysiwyg-toolbar [data-command]").forEach((button) => {
+    button.addEventListener("click", () => {
+        const command = button.dataset.command;
+        const editor = document.getElementById("announcement-content");
+        editor.focus();
+        if (command === "createLink") {
+            const url = window.prompt("請輸入連結網址（https://…）");
+            if (!url) return;
+            try {
+                const parsed = new URL(url);
+                if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("invalid");
+                document.execCommand(command, false, parsed.toString());
+            } catch {
+                showToast("請輸入有效的 http 或 https 網址");
+            }
+            return;
+        }
+        document.execCommand(command, false);
+    });
+});
+
+document.getElementById("admin-announcement-list").addEventListener("click", async (event) => {
+    const item = event.target.closest("[data-announcement-id]");
+    if (!item) return;
+    if (event.target.closest(".edit-announcement")) {
+        editAnnouncement(item.dataset.announcementId);
+        return;
+    }
+    const button = event.target.closest(".delete-announcement");
+    if (!button) return;
+    if (button.dataset.confirmed !== "true") {
+        button.dataset.confirmed = "true";
+        button.textContent = "再按一次確認刪除";
+        button.classList.add("confirming");
+        setTimeout(() => {
+            if (!button.isConnected || button.disabled) return;
+            button.dataset.confirmed = "false";
+            button.textContent = "刪除";
+            button.classList.remove("confirming");
+        }, 5000);
+        return;
+    }
+    button.disabled = true;
+    try {
+        await callDeleteAnnouncement({id: item.dataset.announcementId});
+        showToast("公告已刪除");
+        if (document.getElementById("announcement-id").value === item.dataset.announcementId) {
+            resetAnnouncementForm();
+        }
+        await loadAnnouncements();
+    } catch (error) {
+        showToast(callableErrorMessage(error, "公告刪除失敗"));
+        button.disabled = false;
+    }
+});
+
+document.getElementById("admin-wish-list").addEventListener("click", async (event) => {
+    const button = event.target.closest(".delete-wish");
+    if (!button) return;
+    const item = button.closest("[data-wish-id]");
+    if (!item) return;
+    if (button.dataset.confirmed !== "true") {
+        button.dataset.confirmed = "true";
+        button.textContent = "再按一次確認刪除";
+        button.classList.add("confirming");
+        setTimeout(() => {
+            if (!button.isConnected || button.disabled) return;
+            button.dataset.confirmed = "false";
+            button.textContent = "刪除留言";
+            button.classList.remove("confirming");
+        }, 5000);
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = "刪除中⋯⋯";
+    try {
+        await callDeleteWish({wishId: item.dataset.wishId});
+        adminWishes = adminWishes.filter((wish) => wish.id !== item.dataset.wishId);
+        item.remove();
+        showToast("留言已刪除");
+        const list = document.getElementById("admin-wish-list");
+        if (!list.querySelector("[data-wish-id]")) {
+            list.innerHTML = '<p class="empty-history">目前還沒有留言。</p>';
+        }
+    } catch (error) {
+        showToast(callableErrorMessage(error, "留言刪除失敗"));
+        button.disabled = false;
+        button.dataset.confirmed = "false";
+        button.textContent = "刪除留言";
+        button.classList.remove("confirming");
+    }
+});
 
 document.getElementById("lookup-admin-user").addEventListener("click", lookupAdminUser);
 document.getElementById("admin-user-email").addEventListener("keydown", (event) => {
@@ -420,6 +731,9 @@ document.getElementById("admin-user-email").addEventListener("keydown", (event) 
 });
 document.getElementById("refresh-campaigns").addEventListener("click", loadQrCampaigns);
 document.getElementById("refresh-admins").addEventListener("click", loadAdminUsers);
+document.getElementById("refresh-wishes").addEventListener("click", loadAdminWishes);
+document.getElementById("admin-wish-filter").addEventListener("change", renderAdminWishes);
+document.getElementById("refresh-announcements").addEventListener("click", loadAnnouncements);
 document.querySelectorAll("[data-admin-route]").forEach((link) => {
     link.addEventListener("click", (event) => {
         event.preventDefault();

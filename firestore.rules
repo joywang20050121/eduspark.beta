@@ -35,6 +35,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /wishes/{wishId} {
+      allow read, write: if false;
+    }
+
+    match /wishRateLimits/{uid} {
+      allow read, write: if false;
+    }
+
+    match /announcements/{announcementId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

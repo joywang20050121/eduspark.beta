@@ -6,8 +6,8 @@
     <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花｜管理後台</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=8">
-    <link rel="stylesheet" href="/admin/admin.css?v=2">
+    <link rel="stylesheet" href="/style.css?v=10">
+    <link rel="stylesheet" href="/admin/admin.css?v=5">
 </head>
 <body class="admin-page">
     <div id="toast" role="status" aria-live="polite">提示訊息</div>
@@ -45,6 +45,10 @@
                     <span class="admin-nav-index">03</span>
                     <span>許願池</span>
                 </a>
+                <a href="/admin/announcements" data-admin-route="/admin/announcements">
+                    <span class="admin-nav-index">04</span>
+                    <span>公佈欄</span>
+                </a>
             </nav>
             <div class="admin-sidebar-footer">
                 <p id="admin-account" class="admin-account"></p>
@@ -79,6 +83,10 @@
                     <div class="form-group">
                         <label for="admin-campaign-points">活動點數</label>
                         <input id="admin-campaign-points" type="number" min="1" max="100" value="2">
+                    </div>
+                    <div class="form-group">
+                        <label for="admin-campaign-description">活動內文</label>
+                        <textarea id="admin-campaign-description" maxlength="2000" rows="6" placeholder="活動內容、地點與參加方式"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="admin-campaign-start">開始時間</label>
@@ -127,6 +135,17 @@
                     <div id="admin-user-list"><p class="empty-history">正在載入管理員⋯⋯</p></div>
                 </div>
             </div>
+            <div class="admin-card point-management-card">
+                <h3>批次新增積分</h3>
+                <p class="admin-help">先在使用者列表勾選對象。每次操作都會寫入使用者積分帳本與管理員稽核紀錄。</p>
+                <div class="admin-point-grid">
+                    <div class="form-group"><label for="batch-points">新增點數</label><input id="batch-points" type="number" min="1" max="1000" value="1"></div>
+                    <div class="form-group"><label for="batch-points-reason">新增理由</label><input id="batch-points-reason" type="text" maxlength="200" placeholder="例：協助活動場佈"></div>
+                </div>
+                <p id="selected-user-count" class="admin-help">已選擇 0 位使用者</p>
+                <button id="batch-add-points" class="admin-primary-button">批次新增積分</button>
+            </div>
+            <div id="admin-user-detail" class="admin-card admin-user-detail" hidden></div>
         </section>
 
         <section id="admin-wishes" class="admin-section" data-admin-view="/admin/wishes" hidden>
@@ -135,16 +154,68 @@
                     <p class="admin-kicker">WISHING POOL</p>
                     <h2>許願池</h2>
                 </div>
+                <button id="refresh-wishes" class="small-action-btn">重新整理</button>
             </div>
-            <div class="admin-card admin-placeholder">
-                <span class="admin-placeholder-index">03</span>
-                <h3>許願池管理功能預留區</h3>
-                <p>這個 route 已經建立完成，後續可以在此加入願望瀏覽、審核、分類與狀態管理。</p>
+            <div class="admin-card">
+                <div class="admin-inline-heading"><h3>使用者留言</h3><select id="admin-wish-filter"><option value="all">全部標籤</option><option value="suggestion">建議</option><option value="feedback">回饋</option><option value="curiosity">好奇</option></select></div>
+                <p class="admin-help">刪除後無法復原，操作會保留在管理稽核紀錄中。</p>
+                <div id="admin-wish-list"><p class="empty-history">正在載入留言⋯⋯</p></div>
+            </div>
+        </section>
+
+        <section id="admin-announcements" class="admin-section" data-admin-view="/admin/announcements" hidden>
+            <div class="admin-section-heading">
+                <div>
+                    <p class="admin-kicker">ANNOUNCEMENTS</p>
+                    <h2>公佈欄</h2>
+                </div>
+                <button id="refresh-announcements" class="small-action-btn">重新整理</button>
+            </div>
+            <div class="admin-grid">
+                <div class="admin-card">
+                    <h3 id="announcement-form-title">新增公告</h3>
+                    <input id="announcement-id" type="hidden">
+                    <div class="form-group">
+                        <label for="announcement-title">公告標題</label>
+                        <input id="announcement-title" type="text" maxlength="80" placeholder="例：午間永續野餐會開始報名">
+                    </div>
+                    <div class="form-group">
+                        <label for="announcement-category">公告分類</label>
+                        <select id="announcement-category">
+                            <option value="general">重要公告</option>
+                            <option value="event">活動消息</option>
+                            <option value="update">功能更新</option>
+                            <option value="reward">兌換活動</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="announcement-content">公告內容</label>
+                        <div class="wysiwyg-toolbar" aria-label="文字格式工具列">
+                            <button type="button" data-command="bold"><strong>B</strong></button>
+                            <button type="button" data-command="italic"><em>I</em></button>
+                            <button type="button" data-command="underline"><u>U</u></button>
+                            <button type="button" data-command="insertUnorderedList">• 清單</button>
+                            <button type="button" data-command="createLink">連結</button>
+                            <button type="button" data-command="removeFormat">清除格式</button>
+                        </div>
+                        <div id="announcement-content" class="wysiwyg-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="輸入要顯示在 App 公佈欄的內容"></div>
+                    </div>
+                    <label class="admin-check-option">
+                        <input id="announcement-published" type="checkbox" checked>
+                        立即發佈到 App
+                    </label>
+                    <button id="save-announcement" class="admin-primary-button">儲存公告</button>
+                    <button id="cancel-announcement-edit" class="admin-secondary-button admin-cancel-button" hidden>取消編輯</button>
+                </div>
+                <div class="admin-card">
+                    <h3>公告列表</h3>
+                    <div id="admin-announcement-list"><p class="empty-history">正在載入公告⋯⋯</p></div>
+                </div>
             </div>
         </section>
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=2"></script>
+    <script type="module" src="/admin/admin.js?v=7"></script>
 </body>
 </html>

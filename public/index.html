@@ -6,7 +6,7 @@
     <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -86,9 +86,9 @@
 
             <div class="score-display">
                 <h2>我的積分</h2>
-                <div class="spark-bg">
+                <button class="spark-bg score-history-button" type="button" onclick="window.openPointHistory()" aria-label="查看積分歷史紀錄">
                     <span class="huge-score global-points">0</span>
-                </div>
+                </button>
                 <div class="score-actions-group">
                     <button class="reset-score-btn" id="reset-score-btn" onclick="window.hardResetScore()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -98,9 +98,9 @@
             </div>
 
             <div class="main-btn-group">
-                <button class="main-btn btn-start" onclick="window.openQrScanner()">掃描活動 QR code</button>
+                <button class="main-btn btn-start" onclick="window.openQrScanner()">掃描累積點數</button>
                 <button class="main-btn btn-wish" onclick="window.switchView('view-challenge')">查看活動</button>
-                <button class="main-btn btn-wish"  onclick="window.showComingSoon()">許願池</button>
+                <button class="main-btn btn-wish" onclick="window.openWishPool()">許願池</button>
             </div>
         </div>
 
@@ -178,7 +178,7 @@
             </button>
         </div>
 
-        <!-- ===== 闖關選擇 ===== -->
+        <!-- ===== 活動列表 ===== -->
         <div id="view-challenge" class="view">
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回主頁</button>
@@ -186,17 +186,25 @@
                     <div class="top-spark-points"><span class="global-points">0</span></div>
                 </div>
             </div>
-            <h2 class="section-title">選擇關卡類別</h2>
-            <p class="section-desc">參加活動或展覽以累積你的積分！</p>
+            <h2 class="section-title">活動列表</h2>
+            <p class="section-desc">查看小火花近期活動與累積點數方式。</p>
+            <div id="activity-list" class="activity-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
+        </div>
 
-            <button class="category-btn cat-exhibition" onclick="window.switchView('view-exhibition')">
-                互動展覽
-                <span class="sub-text">在教院的神秘角落，等你來發現</span>
-            </button>
-            <button class="category-btn cat-activity" onclick="window.switchView('view-activity')">
-                實體活動
-                <span class="sub-text">交流會、故事咖啡館與增能講座</span>
-            </button>
+        <div id="activity-detail-overlay" class="detail-overlay" onclick="window.closeActivityDetail()"></div>
+        <div id="activity-detail" class="leaderboard-detail activity-detail" onclick="event.stopPropagation()">
+            <button class="close-btn" onclick="window.closeActivityDetail()">×</button>
+            <div id="activity-detail-content"></div>
+        </div>
+
+        <div id="view-point-history" class="view">
+            <div class="nav-bar">
+                <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回首頁</button>
+                <button class="small-action-btn" onclick="window.loadPointHistory()">重新整理</button>
+            </div>
+            <h2 class="section-title">積分歷史紀錄</h2>
+            <p class="section-desc">每次掃描、兌換或由管理員調整的點數，都會留在這裡。</p>
+            <div id="point-history-list"><p class="empty-history">正在載入紀錄⋯⋯</p></div>
         </div>
 
         <!-- ===== 互動展覽 ===== -->
@@ -241,41 +249,58 @@
             <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '二手遊樂市集')">二手遊樂市集（掃描現場 QR code）</button>
         </div>
 
-        <!-- ===== 兌換獎勵 ===== -->
+        <!-- ===== 許願池 ===== -->
+        <div id="view-wishes" class="view wish-view">
+            <div class="nav-bar wish-nav-bar">
+                <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回首頁</button>
+                <button class="small-action-btn" onclick="window.loadWishes()">重新整理</button>
+            </div>
+            <header class="wish-hero">
+                <div class="wish-hero-mark" aria-hidden="true">✦</div>
+                <div>
+                    <p class="wish-eyebrow">小火花許願池</p>
+                    <h2 class="wish-title">留下任何你想對小火花說的話/建議/好奇！</h2>
+                    <p class="wish-intro">每一個想法，都可能成為讓教院更好的下一顆火花。</p>
+                </div>
+            </header>
+            <div id="wish-list" class="wish-list" aria-live="polite">
+                <p class="empty-history">正在載入留言⋯⋯</p>
+            </div>
+            <form id="wish-form" class="wish-composer">
+                <div class="wish-options-row">
+                    <label>標籤
+                        <select id="wish-category">
+                            <option value="suggestion">建議</option>
+                            <option value="feedback">回饋</option>
+                            <option value="curiosity">好奇</option>
+                        </select>
+                    </label>
+                    <label class="wish-anonymous-option"><input id="wish-anonymous" type="checkbox">匿名留言</label>
+                </div>
+                <div class="wish-input-row">
+                    <textarea id="wish-message" maxlength="500" rows="2" placeholder="輸入想對小火花說的話⋯⋯" aria-label="許願池留言"></textarea>
+                    <button id="send-wish-btn" type="submit" aria-label="送出留言">送出</button>
+                </div>
+            </form>
+            <div id="wish-guest-note" class="wish-guest-note" hidden>訪客可以閱讀留言；登入 Google 帳號後即可留言。</div>
+        </div>
+
+        <!-- ===== 公佈欄 ===== -->
         <div id="view-reward" class="view">
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回主頁</button>
-                <div class="top-status">
-                    <button class="reset-btn" onclick="window.switchView('view-history')">歷史紀錄</button>
-                    <div class="top-spark-points"><span class="global-points">0</span></div>
+                <button class="small-action-btn" onclick="window.loadAnnouncements()">重新整理</button>
+            </div>
+            <div class="board-heading">
+                <p class="board-eyebrow">COE SPARK NEWS</p>
+                <h2 class="section-title">公佈欄</h2>
+                <p class="section-desc">活動消息、新功能與小火花的重要通知都會放在這裡。</p>
+            </div>
+            <div id="announcement-list" class="announcement-list">
+                <div class="announcement-empty">
+                    <img src="spark1.png" alt="小火花">
+                    <h3>敬請期待</h3>
                 </div>
-            </div>
-            <h2 class="section-title">兌換獎勵</h2>
-            <p class="section-desc">辛苦累積的積分，來換點實質的回饋吧！點擊即可兌換（可重複兌換）</p>
-
-            <button class="reward-btn" onclick="window.redeemReward('starbucks')">星巴克一杯（-10點）</button>
-            <button class="reward-btn" onclick="window.redeemReward('sevenEleven100')">7-11 100 元禮品券（-20點）</button>
-            <button class="reward-btn" onclick="window.redeemReward('microCredit02')">0.2 微學分（-30點）</button>
-        </div>
-
-        <!-- ===== 歷史紀錄 ===== -->
-        <div id="view-history" class="view">
-            <div class="nav-bar">
-                <button class="back-btn" onclick="window.switchView('view-reward')">◀ 返回兌換獎勵</button>
-                <div class="top-status">
-                    <button class="reset-btn" id="clear-history-btn" onclick="window.clearHistory()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                        清空歷史紀錄
-                    </button>
-                </div>
-            </div>
-            <div class="history-heading">
-                <h2 class="section-title">歷史紀錄</h2>
-                <div class="history-summary" id="history-summary">目前累積兌換點數：0點</div>
-            </div>
-            <p class="section-desc">這是您過去所有的獎勵兌換明細：</p>
-            <div id="history-container">
-                <p class="empty-history">尚無兌換紀錄，快去闖關累積點數吧！</p>
             </div>
         </div>
 
@@ -283,7 +308,7 @@
         <div id="view-scanner" class="view">
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.closeQrScanner()">◀ 返回</button>
-                <h2 style="font-size:18px;">掃描活動 QR code</h2>
+                <h2 style="font-size:18px;">掃描累積點數</h2>
             </div>
             <p class="section-desc">請將活動現場的 QR code 對準框內。每個活動每個帳號只能領取一次。</p>
             <div class="scanner-frame" id="scanner-frame">
@@ -303,11 +328,10 @@
     <nav class="bottom-nav" id="main-nav">
         <div class="nav-item" data-view="view-reward" onclick="window.navTo('view-reward', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="9" cy="21" r="1"/>
-                <circle cx="20" cy="21" r="1"/>
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                <path d="M4 4h16v16H4z"/>
+                <path d="M8 8h8M8 12h8M8 16h5"/>
             </svg>
-            <span>商店</span>
+            <span>公佈欄</span>
         </div>
         <div class="nav-item active" data-view="view-home" onclick="window.navTo('view-home', this)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -332,7 +356,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=9"></script>
+<script type="module" src="script.js?v=13"></script>
 
 </body>
 </html>

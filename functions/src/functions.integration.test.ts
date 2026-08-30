@@ -32,12 +32,22 @@ type TestClient = {
   redeemReward: ReturnType<typeof httpsCallable>;
   createQrCampaign: ReturnType<typeof httpsCallable>;
   listQrCampaigns: ReturnType<typeof httpsCallable>;
+  listPublicQrCampaigns: ReturnType<typeof httpsCallable>;
   setQrCampaignStatus: ReturnType<typeof httpsCallable>;
   lookupAdminUser: ReturnType<typeof httpsCallable>;
   listAdminUsers: ReturnType<typeof httpsCallable>;
   listUsers: ReturnType<typeof httpsCallable>;
   setAdminRole: ReturnType<typeof httpsCallable>;
   bootstrapSuperAdmin: ReturnType<typeof httpsCallable>;
+  createWish: ReturnType<typeof httpsCallable>;
+  listWishes: ReturnType<typeof httpsCallable>;
+  deleteWish: ReturnType<typeof httpsCallable>;
+  listPublishedAnnouncements: ReturnType<typeof httpsCallable>;
+  listAnnouncements: ReturnType<typeof httpsCallable>;
+  saveAnnouncement: ReturnType<typeof httpsCallable>;
+  deleteAnnouncement: ReturnType<typeof httpsCallable>;
+  batchAddPoints: ReturnType<typeof httpsCallable>;
+  getPointHistory: ReturnType<typeof httpsCallable>;
 };
 
 let testEnvironment: RulesTestEnvironment;
@@ -70,12 +80,22 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     redeemReward: httpsCallable(functions, "redeemReward"),
     createQrCampaign: httpsCallable(functions, "createQrCampaign"),
     listQrCampaigns: httpsCallable(functions, "listQrCampaigns"),
+    listPublicQrCampaigns: httpsCallable(functions, "listPublicQrCampaigns"),
     setQrCampaignStatus: httpsCallable(functions, "setQrCampaignStatus"),
     lookupAdminUser: httpsCallable(functions, "lookupAdminUser"),
     listAdminUsers: httpsCallable(functions, "listAdminUsers"),
     listUsers: httpsCallable(functions, "listUsers"),
     setAdminRole: httpsCallable(functions, "setAdminRole"),
     bootstrapSuperAdmin: httpsCallable(functions, "bootstrapSuperAdmin"),
+    createWish: httpsCallable(functions, "createWish"),
+    listWishes: httpsCallable(functions, "listWishes"),
+    deleteWish: httpsCallable(functions, "deleteWish"),
+    listPublishedAnnouncements: httpsCallable(functions, "listPublishedAnnouncements"),
+    listAnnouncements: httpsCallable(functions, "listAnnouncements"),
+    saveAnnouncement: httpsCallable(functions, "saveAnnouncement"),
+    deleteAnnouncement: httpsCallable(functions, "deleteAnnouncement"),
+    batchAddPoints: httpsCallable(functions, "batchAddPoints"),
+    getPointHistory: httpsCallable(functions, "getPointHistory"),
   };
   clients.push(client);
   return client;
@@ -114,6 +134,9 @@ describe("QR code 交易", () => {
 
     const first = await client.redeemQr({campaignId});
     assert.equal((first.data as {points: number}).points, 5);
+    const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
+    assert.equal(history[0]?.delta, 5);
+    assert.equal(history[0]?.type, "qr");
     await assert.rejects(() => client.redeemQr({campaignId}), (error: {code?: string}) => {
       return error.code === "functions/already-exists";
     });
@@ -152,11 +175,85 @@ describe("獎勵兌換交易", () => {
   });
 });
 
+describe("許願池", () => {
+  test("使用者可以公開或匿名留言，管理員可以刪除", async () => {
+    const named = await createClient("wish-named");
+    const anonymous = await createClient("wish-anonymous");
+    const admin = await createClient("wish-admin", true);
+
+    const namedWish = await named.createWish({message: "希望多辦交流活動", anonymous: false, category: "suggestion"});
+    const anonymousWish = await anonymous.createWish({message: "這是一則匿名建議", anonymous: true, category: "curiosity"});
+    const wishes = (await named.listWishes()).data as Array<{
+      id: string;
+      message: string;
+      authorName: string;
+      anonymous: boolean;
+      category: string;
+    }>;
+    assert.ok(wishes.some((wish) => wish.id === (namedWish.data as {id: string}).id));
+    const hiddenAuthor = wishes.find((wish) =>
+      wish.id === (anonymousWish.data as {id: string}).id);
+    assert.equal(hiddenAuthor?.anonymous, true);
+    assert.equal(hiddenAuthor?.authorName, "匿名");
+    assert.equal(hiddenAuthor?.category, "curiosity");
+
+    await assert.rejects(() => named.deleteWish({
+      wishId: (anonymousWish.data as {id: string}).id,
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
+    const deleted = await admin.deleteWish({wishId: (anonymousWish.data as {id: string}).id});
+    assert.deepEqual(deleted.data, {
+      id: (anonymousWish.data as {id: string}).id,
+      deleted: true,
+    });
+  });
+});
+
+describe("公佈欄", () => {
+  test("管理員可以發佈、編輯與刪除公告，一般使用者只能瀏覽", async () => {
+    const user = await createClient("announcement-user");
+    const admin = await createClient("announcement-admin", true);
+    await assert.rejects(() => user.saveAnnouncement({
+      title: "不應建立",
+      content: "一般使用者不能建立公告",
+      category: "general",
+      published: true,
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
+
+    const created = await admin.saveAnnouncement({
+      title: "測試公告",
+      contentHtml: '<p><strong>公開公告</strong><script>alert("x")</script></p>',
+      category: "event",
+      published: true,
+    });
+    const id = (created.data as {id: string}).id;
+    const published = (await user.listPublishedAnnouncements()).data as Array<{id: string; contentHtml: string}>;
+    assert.ok(published.some((announcement) => announcement.id === id));
+    assert.equal(published.find((announcement) => announcement.id === id)?.contentHtml,
+      "<p><strong>公開公告</strong></p>");
+
+    await admin.saveAnnouncement({
+      id,
+      title: "更新後公告",
+      content: "公告內容已更新",
+      category: "update",
+      published: false,
+    });
+    const all = (await admin.listAnnouncements()).data as Array<{
+      id: string;
+      published: boolean;
+    }>;
+    assert.equal(all.find((announcement) => announcement.id === id)?.published, false);
+    const deleted = await admin.deleteAnnouncement({id});
+    assert.deepEqual(deleted.data, {id, deleted: true});
+  });
+});
+
 describe("管理員 QR code 管理", () => {
   test("一般使用者無法建立活動", async () => {
     const client = await createClient("david");
     await assert.rejects(() => client.createQrCampaign({
       title: "不應建立的活動",
+      description: "測試活動內文",
       points: 5,
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
@@ -167,21 +264,63 @@ describe("管理員 QR code 管理", () => {
     const client = await createClient("erin", true);
     const created = await client.createQrCampaign({
       title: "管理員整合測試",
+      description: "活動詳細說明",
       points: 8,
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
     });
-    const campaign = created.data as {id: string; url: string; svg: string; active: boolean};
+    const campaign = created.data as {id: string; url: string; svg: string; active: boolean; description: string};
     assert.match(campaign.id, /^[a-f0-9]{36}$/);
     assert.match(campaign.url, new RegExp(`redeem=${campaign.id}`));
     assert.match(campaign.svg, /<svg/);
     assert.equal(campaign.active, true);
+    assert.equal(campaign.description, "活動詳細說明");
 
     const listed = await client.listQrCampaigns();
     assert.ok((listed.data as Array<{id: string}>).some((item) => item.id === campaign.id));
+    const publicList = await client.listPublicQrCampaigns();
+    assert.ok((publicList.data as Array<{id: string}>).some((item) => item.id === campaign.id));
 
     const disabled = await client.setQrCampaignStatus({campaignId: campaign.id, active: false});
     assert.deepEqual(disabled.data, {id: campaign.id, active: false});
+  });
+});
+
+describe("積分管理", () => {
+  test("管理員可批次加點並留下使用者帳本", async () => {
+    const first = await createClient("points-first");
+    const second = await createClient("points-second");
+    const admin = await createClient("points-admin", true);
+    await first.saveProfile({realName: "甲同學", nickname: "甲", dept: "教院", bio: "", avatar: ""});
+    await second.saveProfile({realName: "乙同學", nickname: "乙", dept: "教院", bio: "", avatar: ""});
+
+    const result = await admin.batchAddPoints({
+      userIds: [first.auth.currentUser!.uid, second.auth.currentUser!.uid],
+      points: 7,
+      reason: "協助活動場佈",
+    });
+    assert.deepEqual(result.data, {updated: 2, points: 7, reason: "協助活動場佈"});
+    const history = (await first.getPointHistory()).data as Array<{delta: number; label: string}>;
+    assert.equal(history[0]?.delta, 7);
+    assert.equal(history[0]?.label, "協助活動場佈");
+
+    const users = (await admin.listUsers()).data as Array<{
+      uid: string;
+      realName: string;
+      points: number;
+    }>;
+    const firstUser = users.find((user) => user.uid === first.auth.currentUser!.uid);
+    assert.equal(firstUser?.realName, "甲同學");
+    assert.equal(firstUser?.points, 7);
+  });
+
+  test("一般使用者不能批次加點", async () => {
+    const user = await createClient("points-regular");
+    await assert.rejects(() => user.batchAddPoints({
+      userIds: [user.auth.currentUser!.uid],
+      points: 10,
+      reason: "不應成功",
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
   });
 });
 
@@ -202,6 +341,7 @@ describe("管理員權限管理", () => {
 
     const campaign = await bootstrap.createQrCampaign({
       title: "初始化後可管理活動",
+      description: "初始化測試",
       points: 1,
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
@@ -242,6 +382,7 @@ describe("管理員權限管理", () => {
     await target.auth.currentUser!.getIdToken(true);
     await assert.rejects(() => target.createQrCampaign({
       title: "撤權後不可建立",
+      description: "撤權測試",
       points: 1,
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,

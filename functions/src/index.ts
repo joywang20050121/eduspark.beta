@@ -5,6 +5,7 @@ import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import QRCode from "qrcode";
+import sanitizeHtml from "sanitize-html";
 import {optionalText, positiveInteger, requiredText, timestampMillis} from "./validation";
 
 initializeApp();
@@ -22,6 +23,7 @@ const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
 const publicAppUrl = process.env.PUBLIC_APP_URL || "https://coespark-a3f6e.web.app";
 const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
 const callableOptions = {enforceAppCheck};
+const wishCategories = ["suggestion", "feedback", "curiosity"] as const;
 
 type AuthenticatedRequest<T = unknown> = CallableRequest<T> & {
   auth: NonNullable<CallableRequest<T>["auth"]>;
@@ -101,6 +103,25 @@ function adminUserSummary(user: UserRecord) {
     isAdmin: claims.admin === true || isSuperAdmin,
     isSuperAdmin,
   };
+}
+
+function sanitizeAnnouncementHtml(value: unknown): string {
+  const html = requiredText(value, "公告內容", 10000);
+  const sanitized = sanitizeHtml(html, {
+    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a"],
+    allowedAttributes: {a: ["href", "target", "rel"]},
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: (_tagName, attribs) => ({
+        tagName: "a",
+        attribs: {...attribs, target: "_blank", rel: "noopener noreferrer"},
+      }),
+    },
+  }).trim();
+  if (!sanitizeHtml(sanitized, {allowedTags: [], allowedAttributes: {}}).trim()) {
+    throw new HttpsError("invalid-argument", "公告內容不能為空白");
+  }
+  return sanitized;
 }
 
 function numberOrZero(value: unknown): number {
@@ -285,6 +306,180 @@ export const saveProfile = onCall(callableOptions, async (request) => {
   return {...profile, realName};
 });
 
+export const createWish = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const message = requiredText(request.data?.message, "留言", 500);
+  if (typeof request.data?.anonymous !== "boolean") {
+    throw new HttpsError("invalid-argument", "匿名設定格式不正確");
+  }
+  const category = requiredText(request.data?.category, "留言標籤", 20);
+  if (!wishCategories.includes(category as typeof wishCategories[number])) {
+    throw new HttpsError("invalid-argument", "留言標籤不存在");
+  }
+
+  const profile = await db.doc(`users/${request.auth.uid}`).get();
+  const profileData = profile.data() ?? {};
+  const tokenName = typeof request.auth.token.name === "string" ? request.auth.token.name : "";
+  const authorName = typeof profileData.nickname === "string" && profileData.nickname.trim() ?
+    profileData.nickname.trim() : tokenName || "小火花夥伴";
+  const wishRef = db.collection("wishes").doc();
+  const rateLimitRef = db.doc(`wishRateLimits/${request.auth.uid}`);
+  const now = Timestamp.now();
+
+  await db.runTransaction(async (transaction) => {
+    const rateLimit = await transaction.get(rateLimitRef);
+    const lastCreatedAt = rateLimit.data()?.lastCreatedAt;
+    if (lastCreatedAt instanceof Timestamp && now.toMillis() - lastCreatedAt.toMillis() < 5000) {
+      throw new HttpsError("resource-exhausted", "留言送出太快，請稍候再試");
+    }
+    transaction.create(wishRef, {
+      message,
+      anonymous: request.data.anonymous,
+      category,
+      authorUid: request.auth.uid,
+      authorName,
+      createdAt: now,
+    });
+    transaction.set(rateLimitRef, {lastCreatedAt: now});
+  });
+
+  return {
+    id: wishRef.id,
+    message,
+    anonymous: request.data.anonymous,
+    category,
+    authorName: request.data.anonymous ? "匿名" : authorName,
+    createdAt: now.toMillis(),
+  };
+});
+
+export const listWishes = onCall(callableOptions, async (request) => {
+  const snapshot = await db.collection("wishes").orderBy("createdAt", "desc").limit(100).get();
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+    const anonymous = data.anonymous === true;
+    return {
+      id: item.id,
+      message: typeof data.message === "string" ? data.message : "",
+      anonymous,
+      category: wishCategories.includes(data.category) ? data.category : "suggestion",
+      authorName: anonymous ? "匿名" : typeof data.authorName === "string" ?
+        data.authorName : "小火花夥伴",
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
+    };
+  });
+});
+
+export const deleteWish = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const wishId = requiredText(request.data?.wishId, "留言代碼", 128);
+  const wishRef = db.doc(`wishes/${wishId}`);
+  const auditRef = db.collection("adminAuditLogs").doc();
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(wishRef);
+    if (!snapshot.exists) throw new HttpsError("not-found", "找不到這則留言");
+    transaction.delete(wishRef);
+    transaction.create(auditRef, {
+      action: "delete_wish",
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email ?? "",
+      targetId: wishId,
+      targetAuthorUid: snapshot.data()?.authorUid ?? "",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  console.info("Wish deleted", {wishId, actorUid: request.auth.uid});
+  return {id: wishId, deleted: true};
+});
+
+const announcementCategories = ["general", "event", "update", "reward"] as const;
+
+function announcementData(item: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
+  const data = item.data() ?? {};
+  return {
+    id: item.id,
+    title: typeof data.title === "string" ? data.title : "",
+    content: typeof data.content === "string" ? data.content : "",
+    contentHtml: typeof data.contentHtml === "string" ? data.contentHtml : "",
+    category: announcementCategories.includes(data.category) ? data.category : "general",
+    published: data.published === true,
+    updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toMillis() : null,
+  };
+}
+
+export const listPublishedAnnouncements = onCall(callableOptions, async () => {
+  const snapshot = await db.collection("announcements").where("published", "==", true).limit(100).get();
+  return snapshot.docs.map(announcementData)
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+});
+
+export const listAnnouncements = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const snapshot = await db.collection("announcements").orderBy("updatedAt", "desc").limit(100).get();
+  return snapshot.docs.map(announcementData);
+});
+
+export const saveAnnouncement = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const announcementId = optionalText(request.data?.id, "公告代碼", 128);
+  const title = requiredText(request.data?.title, "公告標題", 80);
+  const contentHtml = sanitizeAnnouncementHtml(request.data?.contentHtml ?? request.data?.content);
+  const content = sanitizeHtml(contentHtml, {allowedTags: [], allowedAttributes: {}}).trim();
+  const category = requiredText(request.data?.category, "公告分類", 20);
+  if (!announcementCategories.includes(category as typeof announcementCategories[number])) {
+    throw new HttpsError("invalid-argument", "公告分類不存在");
+  }
+  if (typeof request.data?.published !== "boolean") {
+    throw new HttpsError("invalid-argument", "發佈狀態格式不正確");
+  }
+
+  const ref = announcementId ? db.doc(`announcements/${announcementId}`) :
+    db.collection("announcements").doc();
+  const existing = announcementId ? await ref.get() : null;
+  if (announcementId && !existing?.exists) throw new HttpsError("not-found", "找不到這則公告");
+  await ref.set({
+    title,
+    content,
+    contentHtml,
+    category,
+    published: request.data.published,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid,
+    ...(!existing?.exists ? {
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: request.auth.uid,
+    } : {}),
+  }, {merge: true});
+  await db.collection("adminAuditLogs").add({
+    action: announcementId ? "update_announcement" : "create_announcement",
+    actorUid: request.auth.uid,
+    actorEmail: request.auth.token.email ?? "",
+    targetId: ref.id,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return {id: ref.id, title, content, contentHtml, category, published: request.data.published};
+});
+
+export const deleteAnnouncement = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const announcementId = requiredText(request.data?.id, "公告代碼", 128);
+  const ref = db.doc(`announcements/${announcementId}`);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "找不到這則公告");
+  const auditRef = db.collection("adminAuditLogs").doc();
+  const batch = db.batch();
+  batch.delete(ref);
+  batch.create(auditRef, {
+    action: "delete_announcement",
+    actorUid: request.auth.uid,
+    actorEmail: request.auth.token.email ?? "",
+    targetId: announcementId,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  await batch.commit();
+  return {id: announcementId, deleted: true};
+});
+
 export const redeemReward = onCall(callableOptions, async (request) => {
   requireAuth(request);
   const rewardId = request.data?.rewardId;
@@ -413,6 +608,7 @@ async function campaignQr(campaignId: string) {
 export const createQrCampaign = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const title = requiredText(request.data?.title, "活動名稱", 80);
+  const description = requiredText(request.data?.description, "活動內文", 2000);
   const points = positiveInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
@@ -423,6 +619,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
   const campaignId = randomBytes(18).toString("hex");
   await db.doc(`qrCampaigns/${campaignId}`).create({
     title,
+    description,
     points,
     startsAt: Timestamp.fromMillis(startsAtMillis),
     endsAt: Timestamp.fromMillis(endsAtMillis),
@@ -431,7 +628,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return {id: campaignId, title, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
+  return {id: campaignId, title, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
 });
 
 export const listQrCampaigns = onCall(callableOptions, async (request) => {
@@ -442,6 +639,7 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
     return {
       id: item.id,
       title: data.title,
+      description: typeof data.description === "string" ? data.description : "",
       points: data.points,
       active: data.active === true,
       startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
@@ -449,6 +647,22 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
       url: campaignUrl(item.id),
     };
   }));
+});
+
+export const listPublicQrCampaigns = onCall(callableOptions, async () => {
+  const snapshot = await db.collection("qrCampaigns").orderBy("startsAt", "desc").limit(100).get();
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      id: item.id,
+      title: typeof data.title === "string" ? data.title : "",
+      description: typeof data.description === "string" ? data.description : "",
+      points: numberOrZero(data.points),
+      active: data.active === true,
+      startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
+      endsAt: data.endsAt instanceof Timestamp ? data.endsAt.toMillis() : null,
+    };
+  }).filter((campaign) => campaign.active);
 });
 
 export const getQrCampaign = onCall(callableOptions, async (request) => {
@@ -460,6 +674,7 @@ export const getQrCampaign = onCall(callableOptions, async (request) => {
   return {
     id: snapshot.id,
     title: data.title,
+    description: typeof data.description === "string" ? data.description : "",
     points: data.points,
     active: data.active === true,
     startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
@@ -509,9 +724,89 @@ export const listAdminUsers = onCall(callableOptions, async (request) => {
 export const listUsers = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const page = await adminAuth.listUsers(1000);
+  const publicProfiles = await db.getAll(...page.users.map((user) => db.doc(`users/${user.uid}`)));
+  const privateProfiles = await db.getAll(...page.users.map((user) => db.doc(`usersPrivate/${user.uid}`)));
   return page.users
-    .map(adminUserSummary)
+    .map((user, index) => {
+      const summary = adminUserSummary(user);
+      const publicData = publicProfiles[index].data() ?? {};
+      const privateData = privateProfiles[index].data() ?? {};
+      const profile = sanitizePublicProfile(publicData);
+      return {
+        ...summary,
+        ...profile,
+        realName: typeof privateData.realName === "string" ? privateData.realName :
+          typeof publicData.realName === "string" ? publicData.realName : "",
+        createdAt: privateData.createdAt instanceof Timestamp ? privateData.createdAt.toMillis() : null,
+        lastSignInAt: user.metadata.lastSignInTime ? Date.parse(user.metadata.lastSignInTime) : null,
+      };
+    })
     .sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.email.localeCompare(b.email));
+});
+
+export const batchAddPoints = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  if (!Array.isArray(request.data?.userIds) || request.data.userIds.length < 1 ||
+      request.data.userIds.length > 100) {
+    throw new HttpsError("invalid-argument", "每次請選擇 1 至 100 位使用者");
+  }
+  const userIds = [...new Set(request.data.userIds.map((value: unknown) =>
+    requiredText(value, "使用者代碼", 128)))];
+  const points = positiveInteger(request.data?.points, "新增點數", 1000);
+  const reason = requiredText(request.data?.reason, "新增理由", 200);
+  const auditRef = db.collection("adminAuditLogs").doc();
+
+  await db.runTransaction(async (transaction) => {
+    const refs = userIds.map((uid) => db.doc(`users/${uid}`));
+    const snapshots = await transaction.getAll(...refs);
+    if (snapshots.some((snapshot) => !snapshot.exists)) {
+      throw new HttpsError("not-found", "部分使用者尚未建立個人檔案");
+    }
+    snapshots.forEach((snapshot) => {
+      const uid = snapshot.id;
+      const ledgerRef = db.collection(`usersPrivate/${uid}/pointLedger`).doc();
+      transaction.update(snapshot.ref, {
+        points: FieldValue.increment(points),
+        totalPoints: FieldValue.increment(points),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.create(ledgerRef, {
+        delta: points,
+        type: "admin",
+        sourceId: auditRef.id,
+        label: reason,
+        actorUid: request.auth.uid,
+        actorEmail: request.auth.token.email ?? "",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    });
+    transaction.create(auditRef, {
+      action: "batch_add_points",
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email ?? "",
+      targetUids: userIds,
+      points,
+      reason,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {updated: userIds.length, points, reason};
+});
+
+export const getPointHistory = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const snapshot = await db.collection(`usersPrivate/${request.auth.uid}/pointLedger`)
+    .orderBy("createdAt", "desc").limit(100).get();
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      id: item.id,
+      delta: numberOrZero(data.delta),
+      type: typeof data.type === "string" ? data.type : "other",
+      label: typeof data.label === "string" ? data.label : "積分異動",
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
+    };
+  });
 });
 
 export const setAdminRole = onCall(callableOptions, async (request) => {

@@ -29,6 +29,36 @@ npm run test:functions
 
 Security Rules 測試需要 Java 21 或相容版本，Firebase Emulator 才能啟動。
 
+## 本機開發
+
+安裝 Java 21 與 Functions 依賴後，在專案根目錄執行：
+
+```bash
+npm ci --prefix functions
+npm --prefix functions run dev
+```
+
+網站位於 `http://127.0.0.1:5002`，Emulator 管理介面位於
+`http://127.0.0.1:4000`。localhost 會連到 `demo-eduspark` 的 Auth、Functions
+與 Firestore Emulator，不會讀寫正式 Firebase 專案。
+
+前端手機版 UI 使用 Playwright 測試：
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium
+cd ..
+./functions/node_modules/.bin/firebase emulators:exec \
+  --project demo-eduspark \
+  --only auth,functions,firestore,hosting \
+  "npm --prefix e2e test"
+```
+
+GitHub Actions 會在每次 push 與 pull request 時啟動 Firebase Emulator，執行
+Functions、Firestore Rules 與 Playwright 測試。測試失敗時可從 Actions 頁面
+下載 Playwright 報告。
+
 ## 部署
 
 在專案根目錄執行：
@@ -39,6 +69,12 @@ firebase deploy --only hosting
 ```
 
 先部署 Functions 與 Firestore Rules，確認成功後再部署前端，避免前端呼叫尚未存在的 Functions。
+
+GitHub Actions 會在每次 push 與 pull request 執行完整測試。只有 push 到
+`main` 且所有測試通過時，才會部署 Functions、Firestore 與 Hosting 到
+`coespark-a3f6e`。GitHub repository 必須設定
+`FIREBASE_SERVICE_ACCOUNT_COESPARK_A3F6E` Secret；請勿把 Service Account JSON
+存進 Git。
 
 ## 設定第一位管理員
 
@@ -52,7 +88,8 @@ Google 帳號開啟 `/admin` 並登入，即可完成一次性初始化。伺服
 權限，不能只靠直接呼叫 API 繞過頁面限制。
 
 後台使用獨立 route：`/admin/users` 管理使用者與權限、`/admin/qr` 管理活動
-QR code、`/admin/wishes` 預留許願池功能。側邊欄可持續新增 route。
+QR code、`/admin/wishes` 瀏覽及刪除許願池留言、`/admin/announcements`
+新增、編輯、發佈與刪除 App 公告。側邊欄可持續新增 route。
 
 若網站初始化無法使用，也可以先取得 Google Application Default Credentials：
 

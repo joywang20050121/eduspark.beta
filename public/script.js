@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
-    getAuth, signInWithPopup,
+    connectAuthEmulator, getAuth, signInWithPopup,
     GoogleAuthProvider, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import {
@@ -14,7 +14,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-check.js";
 
 // ========== Firebase 初始化 ==========
-const firebaseConfig = {
+const useLocalEmulators = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const productionFirebaseConfig = {
     apiKey: "AIzaSyD4tdUd6o06zxMyyOq8CwyZuixrIh5j0Kk",
     authDomain: "coespark-a3f6e.firebaseapp.com",
     projectId: "coespark-a3f6e",
@@ -23,6 +24,14 @@ const firebaseConfig = {
     appId: "1:495581170629:web:aba68ff657942cf77b99ac",
     measurementId: "G-7WB0WT0QP1"
 };
+const firebaseConfig = useLocalEmulators
+    ? {
+        ...productionFirebaseConfig,
+        authDomain: 'demo-eduspark.firebaseapp.com',
+        projectId: 'demo-eduspark',
+        storageBucket: 'demo-eduspark.appspot.com'
+    }
+    : productionFirebaseConfig;
 
 const app      = initializeApp(firebaseConfig);
 const auth     = getAuth(app);
@@ -31,8 +40,8 @@ const functions = getFunctions(app, "asia-east1");
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
-const useLocalEmulators = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 if (useLocalEmulators) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9099', {disableWarnings: true});
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
     connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 }
@@ -57,6 +66,11 @@ const callLookupAdminUser = httpsCallable(functions, 'lookupAdminUser');
 const callListAdminUsers = httpsCallable(functions, 'listAdminUsers');
 const callSetAdminRole = httpsCallable(functions, 'setAdminRole');
 const callBootstrapSuperAdmin = httpsCallable(functions, 'bootstrapSuperAdmin');
+const callCreateWish = httpsCallable(functions, 'createWish');
+const callListWishes = httpsCallable(functions, 'listWishes');
+const callListPublishedAnnouncements = httpsCallable(functions, 'listPublishedAnnouncements');
+const callListPublicQrCampaigns = httpsCallable(functions, 'listPublicQrCampaigns');
+const callGetPointHistory = httpsCallable(functions, 'getPointHistory');
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -258,7 +272,7 @@ window.selectAvatarPattern = (letter, color) => {
 window.getSocialUserDisplayData = (user = {}) => {
     const nickname = user.nickname || user.displayName || user.name || '小火花夥伴';
     const dept = user.dept || user.department || user.className || user.class || '系級未填';
-    const bio = user.bio || user.introduction || user.selfIntro || user.intro || user.description || user.about || '尚未留下自我介紹';
+    const bio = String(user.bio || user.introduction || user.selfIntro || user.intro || user.description || user.about || '尚未留下自我介紹').slice(0, 50);
     const avatar = user.avatar || user.photoURL || user.avatarUrl || window.generateAvatarSvg((nickname || '友').trim().charAt(0) || '友', '#758A93');
     const points = Number(user.points || 0);
     const redeemed = Number(user.redeemed || 0);
@@ -294,9 +308,6 @@ window.showSocialDetail = (uid) => {
         </div>
         <div class="detail-info-block">
             <div class="detail-text"><strong>自我介紹：</strong>${escapeHtml(profile.bio)}</div>
-            <div class="detail-text"><strong>目前積分：</strong>${profile.points} 點</div>
-            <div class="detail-text"><strong>總積分：</strong>${profile.totalPoints} 點</div>
-            ${profile.redeemed > 0 ? `<div class="detail-text"><strong>已兌換：</strong>-${profile.redeemed} 點</div>` : ''}
         </div>
     `;
     detail.classList.add('active');
@@ -618,6 +629,184 @@ window.loginAsGuest = async () => {
     if (window.showToast) window.showToast('訪客資料只保存在這台裝置，不會同步到雲端。');
 };
 
+// ========== 許願池 ==========
+const formatWishTime = (millis) => {
+    if (!millis) return '剛剛';
+    return new Intl.DateTimeFormat('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(new Date(millis));
+};
+
+window.loadWishes = async () => {
+    const list = document.getElementById('wish-list');
+    if (!list) return;
+    list.innerHTML = '<p class="empty-history">正在載入留言⋯⋯</p>';
+    try {
+        const response = await callListWishes();
+        const wishes = Array.isArray(response.data) ? response.data : [];
+        const categoryLabels = {suggestion: '建議', feedback: '回饋', curiosity: '好奇'};
+        list.innerHTML = wishes.length ? wishes.map(wish => `
+            <article class="wish-message-card">
+                <div class="wish-message-meta">
+                    <span><span class="wish-tag">${escapeHtml(categoryLabels[wish.category] || '建議')}</span> <span class="wish-author${wish.anonymous ? ' anonymous' : ''}">${escapeHtml(wish.authorName)}</span></span>
+                    <time>${escapeHtml(formatWishTime(wish.createdAt))}</time>
+                </div>
+                <p>${escapeHtml(wish.message)}</p>
+            </article>
+        `).join('') : '<p class="empty-history">目前還沒有留言，成為第一個留下想法的人吧！</p>';
+    } catch (error) {
+        console.error('載入許願池失敗：', error);
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '許願池載入失敗'))}</p>`;
+    }
+};
+
+window.openWishPool = () => {
+    setMainNavVisible(false);
+    activateView('view-wishes');
+    const canPost = Boolean(currentUser) && !window.isGuestMode;
+    document.getElementById('wish-form').hidden = !canPost;
+    document.getElementById('wish-guest-note').hidden = canPost;
+    window.loadWishes();
+};
+
+const formatActivityRange = (start, end) => `${formatWishTime(start)} ～ ${formatWishTime(end)}`;
+
+window.loadActivities = async () => {
+    const list = document.getElementById('activity-list');
+    if (!list) return;
+    list.innerHTML = '<p class="empty-history">正在載入活動⋯⋯</p>';
+    try {
+        const response = await callListPublicQrCampaigns();
+        const campaigns = Array.isArray(response.data) ? response.data : [];
+        list.innerHTML = campaigns.length ? campaigns.map(campaign => `
+            <button class="activity-card" type="button" data-activity-id="${escapeHtml(campaign.id)}">
+                <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
+                <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
+                <span class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</span>
+            </button>`).join('') : '<p class="empty-history">目前沒有活動，敬請期待！</p>';
+        list.querySelectorAll('[data-activity-id]').forEach(button => {
+            button.addEventListener('click', () => {
+                const campaign = campaigns.find(item => item.id === button.dataset.activityId);
+                if (campaign) window.openActivityDetail(campaign);
+            });
+        });
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '活動載入失敗'))}</p>`;
+    }
+};
+
+window.openActivityDetail = (campaign) => {
+    document.getElementById('activity-detail-content').innerHTML = `
+        <p class="wish-eyebrow">活動詳情</p>
+        <h2>${escapeHtml(campaign.title)}</h2>
+        <p class="activity-detail-time">${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</p>
+        <p>${escapeHtml(campaign.description || '尚無活動說明')}</p>
+        <p class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</p>`;
+    document.getElementById('activity-detail').classList.add('active');
+    document.getElementById('activity-detail-overlay').classList.add('active');
+};
+
+window.closeActivityDetail = () => {
+    document.getElementById('activity-detail')?.classList.remove('active');
+    document.getElementById('activity-detail-overlay')?.classList.remove('active');
+};
+
+window.loadPointHistory = async () => {
+    const list = document.getElementById('point-history-list');
+    if (!list) return;
+    if (!currentUser || window.isGuestMode) {
+        list.innerHTML = '<p class="empty-history">訪客模式不會同步積分紀錄。</p>';
+        return;
+    }
+    list.innerHTML = '<p class="empty-history">正在載入紀錄⋯⋯</p>';
+    try {
+        const response = await callGetPointHistory();
+        const history = Array.isArray(response.data) ? response.data : [];
+        list.innerHTML = history.length ? history.map(item => `
+            <article class="point-history-item">
+                <div><strong>${escapeHtml(item.label)}</strong><time>${escapeHtml(formatWishTime(item.createdAt))}</time></div>
+                <span class="point-delta ${Number(item.delta) >= 0 ? 'positive' : 'negative'}">${Number(item.delta) >= 0 ? '+' : ''}${Number(item.delta)}</span>
+            </article>`).join('') : '<p class="empty-history">目前還沒有積分異動紀錄。</p>';
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '積分紀錄載入失敗'))}</p>`;
+    }
+};
+
+window.openPointHistory = () => {
+    window.switchView('view-point-history');
+    window.loadPointHistory();
+};
+
+// ========== 公佈欄 ==========
+const announcementCategoryLabels = {
+    general: '重要公告',
+    event: '活動消息',
+    update: '功能更新',
+    reward: '兌換活動'
+};
+
+window.loadAnnouncements = async () => {
+    const list = document.getElementById('announcement-list');
+    if (!list) return;
+    list.innerHTML = '<p class="empty-history">正在載入公告⋯⋯</p>';
+    try {
+        const response = await callListPublishedAnnouncements();
+        const announcements = Array.isArray(response.data) ? response.data : [];
+        if (!announcements.length) {
+            list.innerHTML = `
+                <div class="announcement-empty">
+                    <img src="spark1.png" alt="小火花">
+                    <h3>敬請期待</h3>
+                </div>`;
+            return;
+        }
+        list.innerHTML = announcements.map(announcement => `
+            <article class="announcement-card announcement-${escapeHtml(announcement.category)}">
+                <div class="announcement-meta">
+                    <span>${escapeHtml(announcementCategoryLabels[announcement.category] || '重要公告')}</span>
+                    <time>${escapeHtml(formatWishTime(announcement.updatedAt))}</time>
+                </div>
+                <h3>${escapeHtml(announcement.title)}</h3>
+                <div class="announcement-rich-content">${announcement.contentHtml || escapeHtml(announcement.content)}</div>
+            </article>
+        `).join('');
+    } catch (error) {
+        console.error('載入公佈欄失敗：', error);
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '公佈欄載入失敗'))}</p>`;
+    }
+};
+
+document.getElementById('wish-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('wish-message');
+    const button = document.getElementById('send-wish-btn');
+    const message = input.value.trim();
+    if (!message) {
+        window.showToast('請先輸入留言內容');
+        input.focus();
+        return;
+    }
+    button.disabled = true;
+    try {
+        await callCreateWish({
+            message,
+            anonymous: document.getElementById('wish-anonymous').checked,
+            category: document.getElementById('wish-category').value
+        });
+        input.value = '';
+        window.showToast('留言已送出');
+        await window.loadWishes();
+    } catch (error) {
+        console.error('送出許願池留言失敗：', error);
+        window.showToast(callableErrorMessage(error, '留言送出失敗'));
+    } finally {
+        button.disabled = false;
+    }
+});
+
 // ========== 建立個人檔案 ==========
 let setupInProgress = false;
 
@@ -884,17 +1073,26 @@ window.fetchLeaderboard = async () => {
         users.sort((a, b) => (Number(b.totalPoints || 0) - Number(a.totalPoints || 0)));
     }
 
+    window.renderLeaderboardUsers(users);
+};
+
+window.renderLeaderboardUsers = (users = []) => {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+
+    window.leaderboardUsers = users;
+
     list.innerHTML = '';
     let rank = 1;
     users.forEach(user => {
         const pointsToShow = window.leaderboardMode === 'total' ? user.totalPoints : Number(user.points || 0);
         const redeemedLabel = window.leaderboardMode === 'total' && user.redeemed > 0 ? `<span class="user-redeemed-tag">-${user.redeemed}點</span>` : '';
         list.innerHTML += `
-            <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}" data-user-id="${escapeHtml(user.id)}" role="button" tabindex="0">
+            <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}">
                 <div class="rank-badge">${rank++}</div>
-                <div class="leader-avatar-wrapper">
+                <button type="button" class="leader-avatar-wrapper" data-user-id="${escapeHtml(user.id)}" aria-label="查看 ${escapeHtml(user.nickname)} 的個人資訊">
                     <img src="${escapeHtml(user.avatar)}" class="leader-avatar" alt="${escapeHtml(user.nickname)} 頭像">
-                </div>
+                </button>
                 <div class="user-details">
                     <div class="user-name-tag">${escapeHtml(user.nickname)}${user.isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
                     <div class="user-dept-tag">${escapeHtml(user.dept || '教院小夥伴')}</div>
@@ -905,14 +1103,8 @@ window.fetchLeaderboard = async () => {
                 </div>
             </div>`;
     });
-    list.querySelectorAll('.leaderboard-item').forEach(item => {
+    list.querySelectorAll('.leader-avatar-wrapper').forEach(item => {
         item.addEventListener('click', () => window.showSocialDetail(item.dataset.userId));
-        item.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                window.showSocialDetail(item.dataset.userId);
-            }
-        });
     });
 };
 
@@ -1369,17 +1561,19 @@ window.switchView = (viewId) => {
     document.getElementById(viewId).classList.add('active');
     document.querySelector('.view-container').scrollTop = 0;
     window.closeSocialDetail();
+    window.closeActivityDetail();
     if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
         setActiveNavItem(viewId);
     }
-    if (['view-scanner', 'view-admin', 'view-admin-roles', 'view-login', 'view-setup'].includes(viewId)) {
+    if (['view-scanner', 'view-wishes', 'view-admin', 'view-admin-roles', 'view-login', 'view-setup'].includes(viewId)) {
         setMainNavVisible(false);
     } else if (userData) {
         setMainNavVisible(true);
     }
 
     if (viewId === 'view-social')  window.fetchLeaderboard();
-    if (viewId === 'view-history') window.renderHistory();
+    if (viewId === 'view-reward') window.loadAnnouncements();
+    if (viewId === 'view-challenge') window.loadActivities();
     if (viewId === 'view-profile' && userData) {
         document.getElementById('edit-realname').value = userData.realName  || '';
         document.getElementById('edit-nickname').value = userData.nickname  || '';

@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -89,7 +90,7 @@
                     <span class="huge-score global-points">0</span>
                 </div>
                 <div class="score-actions-group">
-                    <button class="reset-score-btn" onclick="window.hardResetScore()">
+                    <button class="reset-score-btn" id="reset-score-btn" onclick="window.hardResetScore()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                         重置積分
                     </button>
@@ -97,8 +98,10 @@
             </div>
 
             <div class="main-btn-group">
-                <button class="main-btn btn-start" onclick="window.switchView('view-challenge')">開始探索</button>
+                <button class="main-btn btn-start" onclick="window.openQrScanner()">掃描活動 QR code</button>
+                <button class="main-btn btn-wish" onclick="window.switchView('view-challenge')">查看活動</button>
                 <button class="main-btn btn-wish"  onclick="window.showComingSoon()">許願池</button>
+                <button class="main-btn btn-admin" id="admin-entry-btn" onclick="window.openAdminView()" style="display:none;">QR code 管理</button>
             </div>
         </div>
 
@@ -212,9 +215,9 @@
             <h2 class="section-title">互動展覽</h2>
             <div class="section-desc">與展覽互動，每天都可以累積點點！</div>
 
-            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '祝福牆')">祝福牆 (+1點)</button>
-            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '期中解憂所')">期中解憂所 (+1點)</button>
-            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '期末解憂所')">期末解憂所 (+1點)</button>
+            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '祝福牆')">祝福牆（掃描現場 QR code）</button>
+            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '期中解憂所')">期中解憂所（掃描現場 QR code）</button>
+            <button class="task-btn task-exhibition" onclick="window.earnPoints(this, 1, '期末解憂所')">期末解憂所（掃描現場 QR code）</button>
         </div>
 
         <!-- ===== 實體活動 ===== -->
@@ -232,11 +235,11 @@
             <h2 class="section-title">實體活動</h2>
             <p class="section-desc">參加交流與專業增能活動獲取點數！</p>
 
-            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '咖啡館')">咖啡館 (+2點)</button>
-            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '午間永續野餐會')">午間永續野餐會 (+2點)</button>
-            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '藝術療癒工作坊')">藝術療癒工作坊 (+2點)</button>
-            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '午間議題討論會')">午間議題討論會 (+2點)</button>
-            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '二手遊樂市集')">二手遊樂市集 (+2點)</button>
+            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '咖啡館')">咖啡館（掃描現場 QR code）</button>
+            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '午間永續野餐會')">午間永續野餐會（掃描現場 QR code）</button>
+            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '藝術療癒工作坊')">藝術療癒工作坊（掃描現場 QR code）</button>
+            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '午間議題討論會')">午間議題討論會（掃描現場 QR code）</button>
+            <button class="task-btn task-activity" onclick="window.earnPoints(this, 2, '二手遊樂市集')">二手遊樂市集（掃描現場 QR code）</button>
         </div>
 
         <!-- ===== 兌換獎勵 ===== -->
@@ -251,9 +254,9 @@
             <h2 class="section-title">兌換獎勵</h2>
             <p class="section-desc">辛苦累積的積分，來換點實質的回饋吧！點擊即可兌換（可重複兌換）</p>
 
-            <button class="reward-btn" onclick="window.redeemReward(10, '星巴克一杯')">星巴克一杯 (-10點)</button>
-            <button class="reward-btn" onclick="window.redeemReward(20, '7-11 100元禮品券')">7-11 100元禮品券 (-20點)</button>
-            <button class="reward-btn" onclick="window.redeemReward(30, '0.2微學分')">0.2微學分 (-30點)</button>
+            <button class="reward-btn" onclick="window.redeemReward('starbucks')">星巴克一杯（-10點）</button>
+            <button class="reward-btn" onclick="window.redeemReward('sevenEleven100')">7-11 100 元禮品券（-20點）</button>
+            <button class="reward-btn" onclick="window.redeemReward('microCredit02')">0.2 微學分（-30點）</button>
         </div>
 
         <!-- ===== 歷史紀錄 ===== -->
@@ -261,7 +264,7 @@
             <div class="nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-reward')">◀ 返回兌換獎勵</button>
                 <div class="top-status">
-                    <button class="reset-btn" onclick="window.clearHistory()">
+                    <button class="reset-btn" id="clear-history-btn" onclick="window.clearHistory()">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                         清空歷史紀錄
                     </button>
@@ -274,6 +277,65 @@
             <p class="section-desc">這是您過去所有的獎勵兌換明細：</p>
             <div id="history-container">
                 <p class="empty-history">尚無兌換紀錄，快去闖關累積點數吧！</p>
+            </div>
+        </div>
+
+        <!-- ===== QR code 掃描 ===== -->
+        <div id="view-scanner" class="view">
+            <div class="nav-bar">
+                <button class="back-btn" onclick="window.closeQrScanner()">◀ 返回</button>
+                <h2 style="font-size:18px;">掃描活動 QR code</h2>
+            </div>
+            <p class="section-desc">請將活動現場的 QR code 對準框內。每個活動每個帳號只能領取一次。</p>
+            <div class="scanner-frame" id="scanner-frame">
+                <video id="qr-video" playsinline muted></video>
+                <div class="scanner-target" aria-hidden="true"></div>
+                <canvas id="qr-canvas" hidden></canvas>
+            </div>
+            <p class="scanner-status" id="scanner-status" aria-live="polite">準備開啟相機⋯⋯</p>
+            <button class="main-btn btn-start" id="restart-scanner-btn" onclick="window.startQrCamera()" style="display:none;">重新開啟相機</button>
+            <label class="main-btn btn-wish scanner-upload-btn" for="qr-image-input">從相簿選擇 QR code</label>
+            <input type="file" id="qr-image-input" accept="image/*" hidden>
+        </div>
+
+        <!-- ===== 管理員 QR code 管理 ===== -->
+        <div id="view-admin" class="view">
+            <div class="nav-bar">
+                <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回首頁</button>
+                <h2 style="font-size:18px;">QR code 管理</h2>
+            </div>
+            <div class="admin-card">
+                <h3>建立活動 QR code</h3>
+                <div class="form-group">
+                    <label for="admin-campaign-title">活動名稱</label>
+                    <input id="admin-campaign-title" type="text" maxlength="80" placeholder="例：午間永續野餐會">
+                </div>
+                <div class="form-group">
+                    <label for="admin-campaign-points">活動點數</label>
+                    <input id="admin-campaign-points" type="number" min="1" max="100" value="2">
+                </div>
+                <div class="form-group">
+                    <label for="admin-campaign-start">開始時間</label>
+                    <input id="admin-campaign-start" type="datetime-local">
+                </div>
+                <div class="form-group">
+                    <label for="admin-campaign-end">結束時間</label>
+                    <input id="admin-campaign-end" type="datetime-local">
+                </div>
+                <button class="main-btn btn-start" id="create-campaign-btn" onclick="window.createQrCampaign()">建立 QR code</button>
+            </div>
+            <div class="admin-card qr-preview-card" id="qr-preview-card" style="display:none;">
+                <h3 id="qr-preview-title">活動 QR code</h3>
+                <div id="qr-preview-image" class="qr-preview-image"></div>
+                <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
+                <button class="main-btn btn-wish" onclick="window.downloadCurrentQr()">下載 SVG</button>
+            </div>
+            <div class="admin-card">
+                <div class="admin-list-heading">
+                    <h3>活動列表</h3>
+                    <button class="small-action-btn" onclick="window.loadQrCampaigns()">重新整理</button>
+                </div>
+                <div id="admin-campaign-list"><p class="empty-history">尚未載入活動。</p></div>
             </div>
         </div>
 
@@ -308,8 +370,11 @@
     </nav>
 </div>
 
-<!-- Firebase 與應用邏輯 -->
-<script type="module" src="script.js?v=5"></script>
+<!-- QR code 辨識與應用邏輯 -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
+        integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
+        crossorigin="anonymous"></script>
+<script type="module" src="script.js?v=9"></script>
 
 </body>
 </html>

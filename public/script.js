@@ -1,12 +1,17 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
     getAuth, signInWithPopup,
     GoogleAuthProvider, onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 import {
-    getFirestore, doc, setDoc, getDoc, updateDoc,
-    collection, query, orderBy, getDocs
-} from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+    getFirestore, collection, query, getDocs, orderBy, limit, connectFirestoreEmulator
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import {
+    getFunctions, httpsCallable, connectFunctionsEmulator
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-functions.js";
+import {
+    initializeAppCheck, ReCaptchaEnterpriseProvider
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app-check.js";
 
 // ========== Firebase 初始化 ==========
 const firebaseHostingDomains = new Set([
@@ -29,8 +34,32 @@ const firebaseConfig = {
 const app      = initializeApp(firebaseConfig);
 const auth     = getAuth(app);
 const db       = getFirestore(app);
+const functions = getFunctions(app, "asia-east1");
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
+
+const useLocalEmulators = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+if (useLocalEmulators) {
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}
+
+const appCheckSiteKey = document.querySelector('meta[name="firebase-app-check-site-key"]')?.content.trim();
+if (appCheckSiteKey) {
+    initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true
+    });
+}
+
+const callGetMyProfile = httpsCallable(functions, 'getMyProfile');
+const callSaveProfile = httpsCallable(functions, 'saveProfile');
+const callRedeemReward = httpsCallable(functions, 'redeemReward');
+const callRedeemQr = httpsCallable(functions, 'redeemQr');
+const callCreateQrCampaign = httpsCallable(functions, 'createQrCampaign');
+const callListQrCampaigns = httpsCallable(functions, 'listQrCampaigns');
+const callGetQrCampaign = httpsCallable(functions, 'getQrCampaign');
+const callSetQrCampaignStatus = httpsCallable(functions, 'setQrCampaignStatus');
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -40,14 +69,36 @@ let authenticatedUserLoadUid = null;
 let redemptionHistory = [];
 window.leaderboardUsers = [];
 window.isGuestMode = false;
+window.isAdmin = false;
 window.leaderboardMode = 'current';
+
+const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const safeImageUrl = (value) => {
+    const url = String(value ?? '');
+    return url.startsWith('https://') || url.startsWith('data:image/svg+xml') ? url : '';
+};
+
+const escapeSvgText = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 
 // ========== 頭像與相簿工具 ==========
 window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
+    const safeLetter = escapeSvgText([...String(letter)][0] || '火');
+    const safeColor = /^#[0-9a-f]{6}$/i.test(String(bgColor)) ? bgColor : '#C66E52';
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
-            <rect width="120" height="120" rx="60" fill="${bgColor}" />
-            <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Noto Serif TC, serif" fill="white" font-weight="700">${letter}</text>
+            <rect width="120" height="120" rx="60" fill="${safeColor}" />
+            <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Noto Serif TC, serif" fill="white" font-weight="700">${safeLetter}</text>
         </svg>`;
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };
@@ -160,8 +211,11 @@ window.renderAvatarOptions = () => {
     const charContainer = document.getElementById('avatar-char-options');
     if (charContainer) {
         charContainer.innerHTML = chars.map(ch => `
-            <button type="button" class="avatar-char-btn" data-letter="${ch}" onclick="window.updateAvatarSelection('${ch}', null)">${ch}</button>
+            <button type="button" class="avatar-char-btn" data-letter="${escapeHtml(ch)}">${escapeHtml(ch)}</button>
         `).join('');
+        charContainer.querySelectorAll('.avatar-char-btn').forEach(button => {
+            button.addEventListener('click', () => window.updateAvatarSelection(button.dataset.letter, null));
+        });
     }
 
     const paletteContainer = document.getElementById('avatar-color-palette');
@@ -231,16 +285,17 @@ window.showSocialDetail = (uid) => {
     if (!user || !detail) return;
 
     const profile = window.getSocialUserDisplayData(user);
+    const avatar = safeImageUrl(profile.avatar) || window.generateAvatarSvg(profile.nickname, '#758A93');
     content.innerHTML = `
         <div class="detail-row">
-            <img src="${profile.avatar}" alt="${profile.nickname} 頭像">
+            <img src="${escapeHtml(avatar)}" alt="${escapeHtml(profile.nickname)} 頭像">
             <div>
-                <div class="detail-name">${profile.nickname}${user.id === currentUser?.uid ? ' <span class="me-badge">（我）</span>' : ''}</div>
-                <div class="detail-text">${profile.dept}</div>
+                <div class="detail-name">${escapeHtml(profile.nickname)}${user.id === currentUser?.uid ? ' <span class="me-badge">（我）</span>' : ''}</div>
+                <div class="detail-text">${escapeHtml(profile.dept)}</div>
             </div>
         </div>
         <div class="detail-info-block">
-            <div class="detail-text"><strong>自我介紹：</strong>${profile.bio}</div>
+            <div class="detail-text"><strong>自我介紹：</strong>${escapeHtml(profile.bio)}</div>
             <div class="detail-text"><strong>目前積分：</strong>${profile.points} 點</div>
             <div class="detail-text"><strong>總積分：</strong>${profile.totalPoints} 點</div>
             ${profile.redeemed > 0 ? `<div class="detail-text"><strong>已兌換：</strong>-${profile.redeemed} 點</div>` : ''}
@@ -280,6 +335,25 @@ const setMainNavVisible = (visible) => {
     if (nav) nav.style.display = visible ? 'flex' : 'none';
 };
 
+const setAdminState = (isAdmin) => {
+    window.isAdmin = isAdmin === true;
+    const adminButton = document.getElementById('admin-entry-btn');
+    if (adminButton) adminButton.style.display = window.isAdmin ? 'block' : 'none';
+};
+
+const callableErrorCode = (error) => String(error?.code || '').replace(/^functions\//, '');
+
+const callableErrorMessage = (error, fallback = '操作失敗，請稍後再試') => {
+    const code = callableErrorCode(error);
+    if (code === 'unauthenticated') return '請先登入帳號';
+    if (code === 'permission-denied') return '你沒有執行這項操作的權限';
+    if (code === 'already-exists') return '你已領取過這個活動的點數';
+    if (code === 'not-found') return '找不到這個 QR code';
+    if (code === 'deadline-exceeded') return '這個 QR code 已過期';
+    if (code === 'unavailable') return '目前無法連上伺服器，請檢查網路後再試';
+    return error?.message || fallback;
+};
+
 const handleAuthenticatedUser = async (user) => {
     if (!user) return;
     if (currentUser?.uid === user.uid && userData) return;
@@ -291,9 +365,11 @@ const handleAuthenticatedUser = async (user) => {
     authenticatedUserLoadUid = user.uid;
     authenticatedUserLoadPromise = (async () => {
         try {
-            const snap = await getDoc(doc(db, "users", user.uid));
-            if (snap.exists()) {
-                const data = snap.data();
+            const response = await callGetMyProfile();
+            const result = response.data || {};
+            setAdminState(result.isAdmin);
+            if (result.profile) {
+                const data = result.profile;
                 userData = {
                     ...data,
                     points: typeof data.points === 'number' ? data.points : 0,
@@ -305,10 +381,11 @@ const handleAuthenticatedUser = async (user) => {
                 setMainNavVisible(true);
                 if (window.updatePointsUI) window.updatePointsUI();
                 if (window.applyUserAvatar) window.applyUserAvatar();
+                if (window.handlePendingQrFromUrl) window.handlePendingQrFromUrl();
             } else {
                 userData = null;
                 activateView('view-setup');
-                setMainNavVisible(true);
+                setMainNavVisible(false);
             }
         } catch (err) {
             console.error('登入後讀取資料失敗:', err);
@@ -463,6 +540,7 @@ window.loginWithGoogle = async () => {
 };
 
 window.logout = () => {
+    if (window.stopQrCamera) window.stopQrCamera();
     if (!window.isGuestMode) {
         signOut(auth);
     }
@@ -470,6 +548,7 @@ window.logout = () => {
     currentUser = null;
     userData = null;
     window.isGuestMode = false;
+    setAdminState(false);
     localStorage.removeItem('guest_user_data');
     localStorage.removeItem('guest_redemption_history');
     activateView('view-login');
@@ -489,7 +568,7 @@ window.loginAsGuest = async () => {
             realName: '訪客',
             nickname: '小火花遊客',
             dept: '訪客模式',
-            bio: '這是訪客測試帳號，數據不會被保存。',
+            bio: '這是訪客測試帳號，資料只保存在這台裝置。',
             points: 0,
             history: [],
             avatar: window.generateAvatarSvg('訪', '#8D63A6')
@@ -498,9 +577,10 @@ window.loginAsGuest = async () => {
     }
     activateView('view-home');
     setMainNavVisible(true);
+    setAdminState(false);
     if (window.updatePointsUI) window.updatePointsUI();
     if (window.applyUserAvatar) window.applyUserAvatar();
-    if (window.showToast) window.showToast('歡迎以訪客模式遊玩！數據不會被保存。');
+    if (window.showToast) window.showToast('訪客資料只保存在這台裝置，不會同步到雲端。');
 };
 
 // ========== 建立個人檔案 ==========
@@ -533,18 +613,14 @@ window.completeSetup = async () => {
 
     try {
         const avatar = currentUser.photoURL || window.generateAvatarSvg(nickname.charAt(0) || '火', window.defaultAvatarBackgroundColor);
-        const newUserData = {
+        const response = await callSaveProfile({
             realName,
             nickname,
             dept,
             bio,
-            points: 0,
-            history: [],
             avatar
-        };
-
-        await setDoc(doc(db, "users", currentUser.uid), newUserData);
-        userData = newUserData;
+        });
+        userData = {...response.data, history: []};
         redemptionHistory = [];
 
         setMainNavVisible(true);
@@ -552,9 +628,10 @@ window.completeSetup = async () => {
         window.updatePointsUI();
         window.applyUserAvatar();
         window.showToast('個人檔案已建立！');
+        if (window.handlePendingQrFromUrl) window.handlePendingQrFromUrl();
     } catch (error) {
         console.error('建立個人檔案失敗：', error);
-        window.showToast('個人檔案儲存失敗，請確認網路連線後再試');
+        window.showToast(callableErrorMessage(error, '個人檔案儲存失敗，請確認網路連線後再試'));
     } finally {
         setupInProgress = false;
         if (setupButton) setupButton.disabled = false;
@@ -570,18 +647,22 @@ window.updateProfile = async () => {
     const bio      = document.getElementById('edit-bio').value.trim();
     const preview  = document.getElementById('edit-avatar-preview');
     const updatedAvatar = preview?.src || userData.avatar;
+    if (!realName || !nickname) {
+        window.showToast('請填寫真實姓名與公開暱稱');
+        return;
+    }
     if (window.isGuestMode) {
         userData = { ...userData, realName, nickname, dept, bio, avatar: updatedAvatar };
         localStorage.setItem('guest_user_data', JSON.stringify(userData));
     } else {
-        await updateDoc(doc(db, "users", currentUser.uid), {
-            realName,
-            nickname,
-            dept,
-            bio,
-            avatar: updatedAvatar
-        });
-        userData = { ...userData, realName, nickname, dept, bio, avatar: updatedAvatar };
+        try {
+            const response = await callSaveProfile({realName, nickname, dept, bio, avatar: updatedAvatar});
+            userData = {...userData, ...response.data};
+        } catch (error) {
+            console.error('更新個人檔案失敗：', error);
+            window.showToast(callableErrorMessage(error, '個人檔案修改失敗'));
+            return;
+        }
     }
     window.showToast('修改成功！');
     window.switchView('view-home');
@@ -592,12 +673,13 @@ window.updateProfile = async () => {
 window.earnPoints = async (btnElement, pointsToAdd, taskName) => {
     if (btnElement.classList.contains('completed')) return;
 
-    userData.points += pointsToAdd;
-    if (window.isGuestMode) {
-        localStorage.setItem('guest_user_data', JSON.stringify(userData));
-    } else {
-        await updateDoc(doc(db, "users", currentUser.uid), { points: userData.points });
+    if (!window.isGuestMode) {
+        window.openQrScanner();
+        return;
     }
+
+    userData.points += pointsToAdd;
+    localStorage.setItem('guest_user_data', JSON.stringify(userData));
 
     if (!btnElement.dataset.originalText) {
         btnElement.dataset.originalText = btnElement.innerHTML;
@@ -633,41 +715,63 @@ window.hardResetScore = async () => {
     if (!confirm('確認是否重置積分？\n你的積分一旦重置將無法復原，不如拿去兌換獎勵吧！')) {
         return;
     }
-    userData.points = 0;
-    if (window.isGuestMode) {
-        localStorage.setItem('guest_user_data', JSON.stringify(userData));
-    } else {
-        await updateDoc(doc(db, "users", currentUser.uid), { points: 0 });
+    if (!window.isGuestMode) {
+        window.showToast('正式帳號的積分不能自行重置');
+        return;
     }
+    userData.points = 0;
+    localStorage.setItem('guest_user_data', JSON.stringify(userData));
     window.updatePointsUI();
     window.showToast('積分已歸零重置！');
 };
 
 // ========== 兌換獎勵 ==========
-window.redeemReward = async (cost, rewardName) => {
-    if (userData.points >= cost) {
-        userData.points -= cost;
-        const now = new Date();
-        const timeString = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        redemptionHistory.unshift({ name: rewardName, time: timeString, cost });
-        userData.history = redemptionHistory;
+const rewardCatalog = {
+    starbucks: {name: '星巴克一杯', cost: 10},
+    sevenEleven100: {name: '7-11 100 元禮品券', cost: 20},
+    microCredit02: {name: '0.2 微學分', cost: 30}
+};
+let rewardRedemptionInProgress = false;
 
-        if (window.isGuestMode) {
-            localStorage.setItem('guest_user_data', JSON.stringify(userData));
-            localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
-        } else {
-            await updateDoc(doc(db, "users", currentUser.uid), {
-                points: userData.points,
-                history: redemptionHistory
-            });
+window.redeemReward = async (rewardId) => {
+    if (rewardRedemptionInProgress) return;
+    const reward = rewardCatalog[rewardId];
+    if (!reward) return window.showToast('找不到這個獎勵項目');
+
+    if (window.isGuestMode) {
+        if (userData.points < reward.cost) {
+            return window.showToast(`積分不足喔！還差 ${reward.cost - userData.points} 點才能兌換`);
         }
-
+        userData.points -= reward.cost;
+        redemptionHistory.unshift({name: reward.name, time: Date.now(), cost: reward.cost});
+        userData.history = redemptionHistory;
+        localStorage.setItem('guest_user_data', JSON.stringify(userData));
+        localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
         window.updatePointsUI();
         window.renderHistory();
-        window.showToast(`成功兌換「${rewardName}」！已扣除 ${cost} 點`);
-    } else {
-        const shortage = cost - userData.points;
-        window.showToast(`積分不足喔！還差 ${shortage} 點才能兌換`);
+        return window.showToast(`成功兌換「${reward.name}」！已扣除 ${reward.cost} 點`);
+    }
+
+    rewardRedemptionInProgress = true;
+    try {
+        const response = await callRedeemReward({rewardId});
+        userData.points = response.data.points;
+        redemptionHistory.unshift({
+            id: response.data.redemptionId,
+            name: response.data.reward.name,
+            cost: response.data.reward.cost,
+            time: Date.now()
+        });
+        userData.history = redemptionHistory;
+        window.updatePointsUI();
+        window.renderHistory();
+        window.showToast(`成功兌換「${response.data.reward.name}」！已扣除 ${response.data.reward.cost} 點`);
+    } catch (error) {
+        console.error('兌換獎勵失敗：', error);
+        const shortage = error?.details?.shortage;
+        window.showToast(shortage ? `積分不足喔！還差 ${shortage} 點才能兌換` : callableErrorMessage(error, '獎勵兌換失敗'));
+    } finally {
+        rewardRedemptionInProgress = false;
     }
 };
 
@@ -682,10 +786,14 @@ window.renderHistory = () => {
     container.innerHTML = redemptionHistory.map(item => {
         const cost = window.parseRedeemCost(item);
         const costLabel = cost > 0 ? `（-${cost}點）` : '';
+        const itemTime = typeof item.time === 'number' ? new Date(item.time) : null;
+        const timeLabel = itemTime && !Number.isNaN(itemTime.getTime())
+            ? `${itemTime.getMonth()+1}/${itemTime.getDate()} ${String(itemTime.getHours()).padStart(2,'0')}:${String(itemTime.getMinutes()).padStart(2,'0')}`
+            : item.time || '';
         return `
             <div class="history-item">
-                <span class="history-name">${item.name}${costLabel}</span>
-                <span class="history-time">${item.time}</span>
+                <span class="history-name">${escapeHtml(item.name)}${costLabel}</span>
+                <span class="history-time">${escapeHtml(timeLabel)}</span>
             </div>
         `;
     }).join('');
@@ -697,14 +805,14 @@ window.clearHistory = async () => {
         window.showToast('目前沒有紀錄可以清空喔！');
         return;
     }
+    if (!window.isGuestMode) {
+        window.showToast('正式帳號的兌換紀錄會保留供核對，無法清除');
+        return;
+    }
     redemptionHistory = [];
     userData.history = [];
-    if (window.isGuestMode) {
-        localStorage.setItem('guest_user_data', JSON.stringify(userData));
-        localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
-    } else {
-        await updateDoc(doc(db, "users", currentUser.uid), { history: [] });
-    }
+    localStorage.setItem('guest_user_data', JSON.stringify(userData));
+    localStorage.setItem('guest_redemption_history', JSON.stringify(redemptionHistory));
     window.renderHistory();
     window.showToast('歷史紀錄已清空！');
 };
@@ -721,15 +829,16 @@ window.fetchLeaderboard = async () => {
         `;
         return;
     }
-    const snap = await getDocs(query(collection(db, "users")));
+    const rankingField = window.leaderboardMode === 'total' ? 'totalPoints' : 'points';
+    const snap = await getDocs(query(collection(db, "users"), orderBy(rankingField, 'desc'), limit(100)));
     const users = [];
     snap.forEach(d => {
         const data = d.data();
         const isMe = d.id === currentUser?.uid;
-        const historyData = Array.isArray(data.history) ? data.history : [];
-        const redeemed = window.getRedeemedPoints(historyData);
-        const totalPoints = Number(data.points || 0) + redeemed;
-        const avatarUrl = data.avatar || data.photoURL || data.avatarUrl || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
+        const totalPoints = Math.max(Number(data.points || 0), Number(data.totalPoints || data.points || 0));
+        const redeemed = Math.max(0, totalPoints - Number(data.points || 0));
+        const avatarUrl = safeImageUrl(data.avatar || data.photoURL || data.avatarUrl)
+            || window.generateAvatarSvg(data.nickname?.[0] || '友', '#758A93');
         const profile = window.getSocialUserDisplayData({ ...data, avatar: avatarUrl, points: data.points, redeemed, totalPoints });
         users.push({ id: d.id, ...data, ...profile, avatar: avatarUrl, isMe, redeemed, totalPoints });
     });
@@ -746,16 +855,14 @@ window.fetchLeaderboard = async () => {
         const pointsToShow = window.leaderboardMode === 'total' ? user.totalPoints : Number(user.points || 0);
         const redeemedLabel = window.leaderboardMode === 'total' && user.redeemed > 0 ? `<span class="user-redeemed-tag">-${user.redeemed}點</span>` : '';
         list.innerHTML += `
-            <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}" onclick="window.showSocialDetail('${user.id}')">
+            <div class="leaderboard-item ${user.isMe ? 'leaderboard-item-me' : ''}" data-user-id="${escapeHtml(user.id)}" role="button" tabindex="0">
                 <div class="rank-badge">${rank++}</div>
-                <div class="leader-avatar-wrapper" role="button" tabindex="0"
-                     onclick="event.stopPropagation(); window.showSocialDetail('${user.id}')"
-                     onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); window.showSocialDetail('${user.id}'); }">
-                    <img src="${user.avatar}" class="leader-avatar" alt="${user.nickname} 頭像">
+                <div class="leader-avatar-wrapper">
+                    <img src="${escapeHtml(user.avatar)}" class="leader-avatar" alt="${escapeHtml(user.nickname)} 頭像">
                 </div>
                 <div class="user-details">
-                    <div class="user-name-tag">${user.nickname}${user.isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
-                    <div class="user-dept-tag">${user.dept || '教院小夥伴'}</div>
+                    <div class="user-name-tag">${escapeHtml(user.nickname)}${user.isMe ? ' <span class="me-badge">（我）</span>' : ''}</div>
+                    <div class="user-dept-tag">${escapeHtml(user.dept || '教院小夥伴')}</div>
                 </div>
                 <div class="leaderboard-points-group">
                     ${redeemedLabel}
@@ -763,6 +870,347 @@ window.fetchLeaderboard = async () => {
                 </div>
             </div>`;
     });
+    list.querySelectorAll('.leaderboard-item').forEach(item => {
+        item.addEventListener('click', () => window.showSocialDetail(item.dataset.userId));
+        item.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                window.showSocialDetail(item.dataset.userId);
+            }
+        });
+    });
+};
+
+// ========== QR code 掃描與兌換 ==========
+let qrMediaStream = null;
+let qrAnimationFrame = null;
+let qrLastFrameAt = 0;
+let qrRedemptionInProgress = false;
+
+const setScannerStatus = (message) => {
+    const status = document.getElementById('scanner-status');
+    if (status) status.innerText = message;
+};
+
+const setScannerRestartVisible = (visible) => {
+    const button = document.getElementById('restart-scanner-btn');
+    if (button) button.style.display = visible ? 'block' : 'none';
+};
+
+const extractCampaignId = (value) => {
+    const rawValue = String(value || '').trim();
+    if (/^[a-f0-9]{36}$/.test(rawValue)) return rawValue;
+    try {
+        const url = new URL(rawValue);
+        const allowedHosts = new Set([
+            window.location.hostname,
+            'edu-spark2026.web.app',
+            'edu-spark2026.firebaseapp.com'
+        ]);
+        if (!allowedHosts.has(url.hostname)) return null;
+        const campaignId = url.searchParams.get('redeem') || '';
+        return /^[a-f0-9]{36}$/.test(campaignId) ? campaignId : null;
+    } catch {
+        return null;
+    }
+};
+
+window.stopQrCamera = () => {
+    if (qrAnimationFrame) cancelAnimationFrame(qrAnimationFrame);
+    qrAnimationFrame = null;
+    if (qrMediaStream) qrMediaStream.getTracks().forEach(track => track.stop());
+    qrMediaStream = null;
+    const video = document.getElementById('qr-video');
+    if (video) video.srcObject = null;
+};
+
+window.redeemQrCampaign = async (campaignId) => {
+    if (qrRedemptionInProgress) return;
+    const normalizedId = extractCampaignId(campaignId);
+    if (!normalizedId) {
+        setScannerStatus('這不是教院小火花的活動 QR code。');
+        setScannerRestartVisible(true);
+        return;
+    }
+
+    qrRedemptionInProgress = true;
+    window.stopQrCamera();
+    setScannerRestartVisible(false);
+    setScannerStatus('正在確認活動與領取資格⋯⋯');
+    try {
+        const response = await callRedeemQr({campaignId: normalizedId});
+        userData.points = response.data.points;
+        userData.totalPoints = response.data.totalPoints;
+        window.updatePointsUI();
+        setScannerStatus(`成功完成「${response.data.title}」，獲得 ${response.data.earned} 點！`);
+        window.showToast(`獲得 ${response.data.earned} 點！`);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('redeem');
+        window.history.replaceState({}, '', url);
+        setTimeout(() => {
+            setMainNavVisible(true);
+            window.switchView('view-home');
+        }, 1600);
+    } catch (error) {
+        console.error('QR code 兌換失敗：', error);
+        const message = callableErrorMessage(error, '無法領取活動點數');
+        setScannerStatus(message);
+        window.showToast(message);
+        setScannerRestartVisible(true);
+    } finally {
+        qrRedemptionInProgress = false;
+    }
+};
+
+const scanVideoFrame = (timestamp) => {
+    const video = document.getElementById('qr-video');
+    const canvas = document.getElementById('qr-canvas');
+    if (!qrMediaStream || !video || !canvas) return;
+    qrAnimationFrame = requestAnimationFrame(scanVideoFrame);
+    if (timestamp - qrLastFrameAt < 180 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    qrLastFrameAt = timestamp;
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) return;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', {willReadFrequently: true});
+    context.drawImage(video, 0, 0, width, height);
+    const imageData = context.getImageData(0, 0, width, height);
+    const result = window.jsQR?.(imageData.data, width, height, {inversionAttempts: 'dontInvert'});
+    if (result?.data) window.redeemQrCampaign(result.data);
+};
+
+window.startQrCamera = async () => {
+    if (qrRedemptionInProgress) return;
+    window.stopQrCamera();
+    setScannerRestartVisible(false);
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        setScannerStatus('目前瀏覽器無法開啟相機，請改用 HTTPS 網址或從相簿選擇 QR code。');
+        setScannerRestartVisible(true);
+        return;
+    }
+    if (typeof window.jsQR !== 'function') {
+        setScannerStatus('QR code 掃描元件載入失敗，請重新整理後再試。');
+        setScannerRestartVisible(true);
+        return;
+    }
+
+    setScannerStatus('請允許網站使用相機。');
+    try {
+        qrMediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 1280}}
+        });
+        const video = document.getElementById('qr-video');
+        video.srcObject = qrMediaStream;
+        await video.play();
+        setScannerStatus('請將 QR code 對準框內。');
+        qrAnimationFrame = requestAnimationFrame(scanVideoFrame);
+    } catch (error) {
+        console.error('開啟相機失敗：', error);
+        const message = error?.name === 'NotAllowedError'
+            ? '相機權限被拒絕，請在瀏覽器設定中允許相機，或從相簿選擇 QR code。'
+            : '無法開啟相機，請從相簿選擇 QR code。';
+        setScannerStatus(message);
+        setScannerRestartVisible(true);
+    }
+};
+
+window.openQrScanner = () => {
+    if (window.isGuestMode || !currentUser) {
+        window.showToast('請先使用 Google 帳號登入，才能領取活動點數');
+        return;
+    }
+    activateView('view-scanner');
+    setMainNavVisible(false);
+    window.startQrCamera();
+};
+
+window.closeQrScanner = () => {
+    window.stopQrCamera();
+    setMainNavVisible(true);
+    window.switchView('view-home');
+};
+
+window.handlePendingQrFromUrl = () => {
+    if (!currentUser || !userData || window.isGuestMode) return;
+    const campaignId = new URL(window.location.href).searchParams.get('redeem');
+    if (!campaignId) return;
+    activateView('view-scanner');
+    setMainNavVisible(false);
+    window.redeemQrCampaign(campaignId);
+};
+
+const decodeQrImage = async (file) => {
+    if (!file || typeof window.jsQR !== 'function') return null;
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.getElementById('qr-canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', {willReadFrequently: true});
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    return window.jsQR(imageData.data, canvas.width, canvas.height)?.data || null;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const imageInput = document.getElementById('qr-image-input');
+    imageInput?.addEventListener('change', async () => {
+        const file = imageInput.files?.[0];
+        if (!file) return;
+        try {
+            setScannerStatus('正在辨識圖片⋯⋯');
+            const result = await decodeQrImage(file);
+            if (result) {
+                window.redeemQrCampaign(result);
+            } else {
+                setScannerStatus('圖片中找不到 QR code，請換一張清楚的圖片。');
+            }
+        } catch (error) {
+            console.error('辨識 QR code 圖片失敗：', error);
+            setScannerStatus('無法讀取這張圖片，請換一張圖片再試。');
+        } finally {
+            imageInput.value = '';
+        }
+    });
+});
+
+// ========== 管理員 QR code 管理 ==========
+let currentQrDownload = null;
+
+const toLocalDateTimeInput = (date) => {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+};
+
+const formatCampaignTime = (millis) => {
+    if (!millis) return '未設定';
+    return new Intl.DateTimeFormat('zh-TW', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+    }).format(new Date(millis));
+};
+
+const showQrPreview = (campaign) => {
+    currentQrDownload = campaign;
+    document.getElementById('qr-preview-card').style.display = 'block';
+    document.getElementById('qr-preview-title').innerText = `${campaign.title} QR code`;
+    document.getElementById('qr-preview-image').innerHTML = campaign.svg;
+    const link = document.getElementById('qr-preview-url');
+    link.href = campaign.url;
+    link.innerText = campaign.url;
+    document.getElementById('qr-preview-card').scrollIntoView({behavior: 'smooth', block: 'start'});
+};
+
+window.downloadCurrentQr = () => {
+    if (!currentQrDownload?.svg) return;
+    const blob = new Blob([currentQrDownload.svg], {type: 'image/svg+xml;charset=utf-8'});
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = `${currentQrDownload.title || '活動'}-QR-code.svg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+};
+
+window.openAdminView = () => {
+    if (!window.isAdmin) {
+        window.showToast('你沒有管理員權限');
+        return;
+    }
+    const start = new Date();
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    document.getElementById('admin-campaign-start').value ||= toLocalDateTimeInput(start);
+    document.getElementById('admin-campaign-end').value ||= toLocalDateTimeInput(end);
+    setMainNavVisible(false);
+    activateView('view-admin');
+    window.loadQrCampaigns();
+};
+
+window.createQrCampaign = async () => {
+    if (!window.isAdmin) return window.showToast('你沒有管理員權限');
+    const title = document.getElementById('admin-campaign-title').value.trim();
+    const points = Number(document.getElementById('admin-campaign-points').value);
+    const startsAt = new Date(document.getElementById('admin-campaign-start').value).getTime();
+    const endsAt = new Date(document.getElementById('admin-campaign-end').value).getTime();
+    if (!title || !Number.isInteger(points) || !startsAt || !endsAt) {
+        window.showToast('請完整填寫活動名稱、點數與時間');
+        return;
+    }
+    const button = document.getElementById('create-campaign-btn');
+    button.disabled = true;
+    try {
+        const response = await callCreateQrCampaign({title, points, startsAt, endsAt});
+        showQrPreview(response.data);
+        document.getElementById('admin-campaign-title').value = '';
+        window.showToast('活動 QR code 已建立');
+        await window.loadQrCampaigns();
+    } catch (error) {
+        console.error('建立 QR code 失敗：', error);
+        window.showToast(callableErrorMessage(error, '建立 QR code 失敗'));
+    } finally {
+        button.disabled = false;
+    }
+};
+
+window.loadQrCampaigns = async () => {
+    if (!window.isAdmin) return;
+    const list = document.getElementById('admin-campaign-list');
+    list.innerHTML = '<p class="empty-history">正在載入活動⋯⋯</p>';
+    try {
+        const response = await callListQrCampaigns();
+        const campaigns = Array.isArray(response.data) ? response.data : [];
+        if (campaigns.length === 0) {
+            list.innerHTML = '<p class="empty-history">尚未建立活動 QR code。</p>';
+            return;
+        }
+        list.innerHTML = campaigns.map(campaign => `
+            <div class="campaign-item">
+                <div class="campaign-item-heading">
+                    <div class="campaign-title">${escapeHtml(campaign.title)}</div>
+                    <span class="campaign-status ${campaign.active ? 'active' : ''}">${campaign.active ? '啟用中' : '已停用'}</span>
+                </div>
+                <div class="campaign-meta">
+                    ${campaign.points} 點<br>
+                    ${formatCampaignTime(campaign.startsAt)}～${formatCampaignTime(campaign.endsAt)}
+                </div>
+                <div class="campaign-actions">
+                    <button class="small-action-btn" onclick="window.showCampaignQr('${campaign.id}')">查看 QR code</button>
+                    <button class="small-action-btn" onclick="window.toggleCampaign('${campaign.id}', ${!campaign.active})">${campaign.active ? '停用' : '重新啟用'}</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('載入活動列表失敗：', error);
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '活動列表載入失敗'))}</p>`;
+    }
+};
+
+window.showCampaignQr = async (campaignId) => {
+    try {
+        const response = await callGetQrCampaign({campaignId});
+        showQrPreview(response.data);
+    } catch (error) {
+        console.error('取得 QR code 失敗：', error);
+        window.showToast(callableErrorMessage(error, '無法取得 QR code'));
+    }
+};
+
+window.toggleCampaign = async (campaignId, active) => {
+    if (!window.isAdmin) return;
+    try {
+        await callSetQrCampaignStatus({campaignId, active});
+        window.showToast(active ? '活動已重新啟用' : '活動已停用');
+        await window.loadQrCampaigns();
+    } catch (error) {
+        console.error('更新活動狀態失敗：', error);
+        window.showToast(callableErrorMessage(error, '活動狀態更新失敗'));
+    }
 };
 
 // ========== 視圖切換 ==========
@@ -773,12 +1221,18 @@ window.navTo = (viewId, el) => {
 };
 
 window.switchView = (viewId) => {
+    if (viewId !== 'view-scanner' && window.stopQrCamera) window.stopQrCamera();
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(viewId).classList.add('active');
     document.querySelector('.view-container').scrollTop = 0;
     window.closeSocialDetail();
     if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
         setActiveNavItem(viewId);
+    }
+    if (['view-scanner', 'view-admin', 'view-login', 'view-setup'].includes(viewId)) {
+        setMainNavVisible(false);
+    } else if (userData) {
+        setMainNavVisible(true);
     }
 
     if (viewId === 'view-social')  window.fetchLeaderboard();
@@ -816,11 +1270,16 @@ window.switchView = (viewId) => {
 window.updatePointsUI = () => {
     const pts = userData ? userData.points : 0;
     document.querySelectorAll('.global-points').forEach(el => el.innerText = pts);
+    const resetScoreButton = document.getElementById('reset-score-btn');
+    const clearHistoryButton = document.getElementById('clear-history-btn');
+    if (resetScoreButton) resetScoreButton.style.display = window.isGuestMode ? 'inline-flex' : 'none';
+    if (clearHistoryButton) clearHistoryButton.style.display = window.isGuestMode ? 'inline-flex' : 'none';
     window.applyUserAvatar();
 };
 
 window.applyUserAvatar = () => {
-    const avatarUrl = userData?.avatar || currentUser?.photoURL || window.generateAvatarSvg(userData?.nickname?.[0] || '你', window.defaultAvatarBackgroundColor);
+    const avatarUrl = safeImageUrl(userData?.avatar || currentUser?.photoURL)
+        || window.generateAvatarSvg(userData?.nickname?.[0] || '你', window.defaultAvatarBackgroundColor);
     const homeAvatar = document.getElementById('home-avatar');
     const profilePreview = document.getElementById('edit-avatar-preview');
     if (homeAvatar) homeAvatar.src = avatarUrl;
@@ -848,7 +1307,7 @@ window.closeTeamIntro = () => {
 let toastTimeout;
 window.showToast = (msg) => {
     const t = document.getElementById('toast');
-    t.innerHTML = msg;
+    t.textContent = String(msg ?? '');
     t.classList.add('show');
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => t.classList.remove('show'), 2500);

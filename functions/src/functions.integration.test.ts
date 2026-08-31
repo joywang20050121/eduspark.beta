@@ -137,6 +137,11 @@ describe("QR code 交易", () => {
     const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
     assert.equal(history[0]?.delta, 5);
     assert.equal(history[0]?.type, "qr");
+    const campaigns = (await client.listPublicQrCampaigns()).data as Array<{
+      id: string;
+      redeemed: boolean;
+    }>;
+    assert.equal(campaigns.find((campaign) => campaign.id === campaignId)?.redeemed, true);
     await assert.rejects(() => client.redeemQr({campaignId}), (error: {code?: string}) => {
       return error.code === "functions/already-exists";
     });
@@ -221,7 +226,7 @@ describe("公佈欄", () => {
 
     const created = await admin.saveAnnouncement({
       title: "測試公告",
-      contentHtml: '<p><strong>公開公告</strong><script>alert("x")</script></p>',
+      contentHtml: '<div><strong>公開公告</strong></div><div>第二行<script>alert("x")</script></div>',
       category: "event",
       published: true,
     });
@@ -229,7 +234,7 @@ describe("公佈欄", () => {
     const published = (await user.listPublishedAnnouncements()).data as Array<{id: string; contentHtml: string}>;
     assert.ok(published.some((announcement) => announcement.id === id));
     assert.equal(published.find((announcement) => announcement.id === id)?.contentHtml,
-      "<p><strong>公開公告</strong></p>");
+      "<div><strong>公開公告</strong></div><div>第二行</div>");
 
     await admin.saveAnnouncement({
       id,
@@ -304,14 +309,33 @@ describe("積分管理", () => {
     assert.equal(history[0]?.delta, 7);
     assert.equal(history[0]?.label, "協助活動場佈");
 
-    const users = (await admin.listUsers()).data as Array<{
+    const reduced = await admin.batchAddPoints({
+      userIds: [first.auth.currentUser!.uid],
+      points: -3,
+      reason: "修正重複加點",
+    });
+    assert.deepEqual(reduced.data, {updated: 1, points: -3, reason: "修正重複加點"});
+    const adjustedHistory = (await first.getPointHistory()).data as Array<{delta: number; label: string}>;
+    assert.equal(adjustedHistory[0]?.delta, -3);
+    assert.equal(adjustedHistory[0]?.label, "修正重複加點");
+
+    await assert.rejects(() => admin.batchAddPoints({
+      userIds: [second.auth.currentUser!.uid],
+      points: -8,
+      reason: "不應扣成負數",
+    }), (error: {code?: string}) => error.code === "functions/failed-precondition");
+
+    const users = (await admin.listUsers({query: "甲同學"})).data as Array<{
       uid: string;
       realName: string;
       points: number;
+      totalPoints: number;
     }>;
+    assert.equal(users.length, 1);
     const firstUser = users.find((user) => user.uid === first.auth.currentUser!.uid);
     assert.equal(firstUser?.realName, "甲同學");
-    assert.equal(firstUser?.points, 7);
+    assert.equal(firstUser?.points, 4);
+    assert.equal(firstUser?.totalPoints, 7);
   });
 
   test("一般使用者不能批次加點", async () => {

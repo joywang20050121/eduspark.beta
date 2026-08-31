@@ -61,7 +61,6 @@ const callCreateQrCampaign = httpsCallable(functions, "createQrCampaign");
 const callListQrCampaigns = httpsCallable(functions, "listQrCampaigns");
 const callGetQrCampaign = httpsCallable(functions, "getQrCampaign");
 const callSetQrCampaignStatus = httpsCallable(functions, "setQrCampaignStatus");
-const callLookupAdminUser = httpsCallable(functions, "lookupAdminUser");
 const callListUsers = httpsCallable(functions, "listUsers");
 const callSetAdminRole = httpsCallable(functions, "setAdminRole");
 const callListWishes = httpsCallable(functions, "listWishes");
@@ -107,6 +106,33 @@ const showToast = (message) => {
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => toast.classList.remove("show"), 3000);
 };
+
+const openAdminModal = (modalId) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.hidden = false;
+    document.body.classList.add("admin-modal-open");
+    modal.querySelector("input:not([type='hidden']), button, [contenteditable='true']")?.focus();
+};
+
+const closeAdminModal = (modalId) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.hidden = true;
+    if (!document.querySelector(".admin-modal:not([hidden])")) {
+        document.body.classList.remove("admin-modal-open");
+    }
+};
+
+document.querySelectorAll("[data-close-modal]").forEach((button) => {
+    button.addEventListener("click", () => closeAdminModal(button.dataset.closeModal));
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const activeModal = document.querySelector(".admin-modal:not([hidden])");
+    if (activeModal) closeAdminModal(activeModal.id);
+});
 
 const showLogin = () => {
     loading.hidden = true;
@@ -244,14 +270,12 @@ document.getElementById("admin-logout").addEventListener("click", async () => {
 
 const showQrPreview = (campaign) => {
     currentQrDownload = campaign;
-    const card = document.getElementById("qr-preview-card");
-    card.hidden = false;
     document.getElementById("qr-preview-title").textContent = `${campaign.title} QR code`;
     document.getElementById("qr-preview-image").innerHTML = campaign.svg;
     const link = document.getElementById("qr-preview-url");
     link.href = campaign.url;
     link.textContent = campaign.url;
-    card.scrollIntoView({behavior: "smooth", block: "start"});
+    openAdminModal("qr-preview-modal");
 };
 
 const loadQrCampaigns = async () => {
@@ -325,9 +349,10 @@ document.getElementById("create-campaign").addEventListener("click", async (even
     button.disabled = true;
     try {
         const response = await callCreateQrCampaign({title, description, points, startsAt, endsAt});
-        showQrPreview(response.data);
         document.getElementById("admin-campaign-title").value = "";
         document.getElementById("admin-campaign-description").value = "";
+        closeAdminModal("campaign-form-modal");
+        showQrPreview(response.data);
         showToast("活動 QR code 已建立");
         await loadQrCampaigns();
     } catch (error) {
@@ -335,6 +360,11 @@ document.getElementById("create-campaign").addEventListener("click", async (even
     } finally {
         button.disabled = false;
     }
+});
+
+document.getElementById("open-campaign-form").addEventListener("click", () => {
+    initializeCampaignTimes();
+    openAdminModal("campaign-form-modal");
 });
 
 document.getElementById("download-qr").addEventListener("click", () => {
@@ -349,106 +379,61 @@ document.getElementById("download-qr").addEventListener("click", () => {
     URL.revokeObjectURL(objectUrl);
 });
 
-const renderAdminUser = (user) => {
-    const container = document.getElementById("admin-user-result");
-    if (!user) {
-        container.innerHTML = "";
-        return;
-    }
-    const roleLabel = user.isAdmin ? "管理員" : "一般使用者";
-    const actionDisabled = user.isSuperAdmin || user.disabled;
-    container.innerHTML = `
-        <div class="campaign-item role-user-item">
-            <div class="campaign-item-heading">
-                <div>
-                    <div class="campaign-title">${escapeHtml(user.displayName || user.email)}</div>
-                    <div class="campaign-meta">${escapeHtml(user.email)}<br>${escapeHtml(roleLabel)}${user.disabled ? "・帳號已停用" : ""}</div>
-                </div>
-                <span class="campaign-status ${user.isAdmin ? "active" : ""}">${escapeHtml(roleLabel)}</span>
-            </div>
-            <div class="campaign-actions">
-                <button id="change-selected-role" class="small-action-btn" ${actionDisabled ? "disabled" : ""}>${user.isAdmin ? "撤銷管理員" : "設為管理員"}</button>
-            </div>
-        </div>`;
-    document.getElementById("change-selected-role")?.addEventListener("click", () => {
-        setSelectedAdminRole(!user.isAdmin);
-    });
-};
-
-const lookupAdminUser = async () => {
-    const input = document.getElementById("admin-user-email");
-    const email = input.value.trim();
-    if (!email) {
-        showToast("請輸入電子郵件");
-        return;
-    }
-    const button = document.getElementById("lookup-admin-user");
-    button.disabled = true;
-    try {
-        selectedAdminUser = (await callLookupAdminUser({email})).data;
-        renderAdminUser(selectedAdminUser);
-    } catch (error) {
-        selectedAdminUser = null;
-        renderAdminUser(null);
-        showToast(callableErrorMessage(error, "查詢使用者失敗"));
-    } finally {
-        button.disabled = false;
-    }
-};
-
 const setSelectedAdminRole = async (admin) => {
     if (!selectedAdminUser?.email) return;
     if (!admin && !window.confirm(`確定要撤銷 ${selectedAdminUser.email} 的管理員權限嗎？`)) return;
     try {
-        selectedAdminUser = (await callSetAdminRole({
+        const role = (await callSetAdminRole({
             email: selectedAdminUser.email,
             admin
         })).data;
-        renderAdminUser(selectedAdminUser);
+        selectedAdminUser = {...selectedAdminUser, ...role};
         showToast(admin ? "已授予管理員權限，對方重新開啟後台即可生效" : "已撤銷管理員權限");
-        await loadAdminUsers();
+        await loadAdminUsers(document.getElementById("admin-user-query").value.trim());
+        const updatedUser = adminUsers.find((user) => user.uid === selectedAdminUser.uid);
+        if (updatedUser) showUserDetail(updatedUser.uid);
     } catch (error) {
         showToast(callableErrorMessage(error, "更新管理員權限失敗"));
     }
 };
 
-const loadAdminUsers = async () => {
+window.renderAdminUsers = (users, query = "") => {
     const list = document.getElementById("admin-user-list");
-    list.innerHTML = '<p class="empty-history">正在載入管理員⋯⋯</p>';
-    try {
-        const response = await callListUsers();
-        adminUsers = Array.isArray(response.data) ? response.data : [];
-        selectedPointUserIds.clear();
-        updateSelectedUserCount();
-        list.innerHTML = adminUsers.length ? adminUsers.map((user) => `
-            <div class="campaign-item role-user-item" data-email="${escapeHtml(user.email)}" data-uid="${escapeHtml(user.uid)}">
-                <div class="campaign-item-heading">
-                    ${user.realName ? `<input class="point-user-checkbox" type="checkbox" aria-label="選擇 ${escapeHtml(user.realName || user.email)}">` : ''}
-                    <div>
-                        <div class="campaign-title">${escapeHtml(user.nickname || user.displayName || user.email)}</div>
-                        <div class="campaign-meta">${escapeHtml(user.email)}・${Number(user.points || 0)} 點</div>
-                    </div>
+    adminUsers = Array.isArray(users) ? users : [];
+    selectedPointUserIds.clear();
+    updateSelectedUserCount();
+    list.innerHTML = adminUsers.length ? adminUsers.map((user) => `
+            <div class="admin-user-row" data-uid="${escapeHtml(user.uid)}">
+                <label class="admin-user-select" title="${user.realName ? "選擇使用者" : "尚未建立個人檔案"}">
+                    <input class="point-user-checkbox" type="checkbox" aria-label="選擇 ${escapeHtml(user.realName || user.email)}" ${user.realName ? "" : "disabled"}>
+                </label>
+                <button type="button" class="admin-user-row-content view-user-detail" aria-label="查看 ${escapeHtml(user.realName || user.nickname || user.email)} 的詳細資料">
+                    <span class="admin-user-name"><strong>${escapeHtml(user.realName || user.nickname || user.displayName || "尚未建立檔案")}</strong><small>${escapeHtml(user.nickname || "")}</small></span>
+                    <span class="admin-user-email">${escapeHtml(user.email)}</span>
+                    <span>${Number(user.points || 0)} 點</span>
                     <span class="campaign-status ${user.isAdmin ? "active" : ""}">${user.isAdmin ? "管理員" : "一般使用者"}</span>
-                </div>
-                <div class="campaign-actions"><button class="small-action-btn view-user-detail">查看詳情</button>${user.isSuperAdmin ? "" : '<button class="small-action-btn manage-role">管理權限</button>'}</div>
+                    <span class="admin-row-arrow" aria-hidden="true">›</span>
+                </button>
             </div>
-        `).join("") : '<p class="empty-history">目前沒有使用者。</p>';
-        list.querySelectorAll(".manage-role").forEach((button) => {
-            button.addEventListener("click", () => {
-                document.getElementById("admin-user-email").value = button.closest("[data-email]").dataset.email;
-                lookupAdminUser();
-            });
+        `).join("") : `<p class="empty-history">${query ? "找不到符合條件的使用者。" : "目前沒有使用者。"}</p>`;
+    list.querySelectorAll(".view-user-detail").forEach((button) => {
+        button.addEventListener("click", () => showUserDetail(button.closest("[data-uid]").dataset.uid));
+    });
+    list.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+            const uid = checkbox.closest("[data-uid]").dataset.uid;
+            if (checkbox.checked) selectedPointUserIds.add(uid); else selectedPointUserIds.delete(uid);
+            updateSelectedUserCount();
         });
-        list.querySelectorAll(".view-user-detail").forEach((button) => {
-            button.addEventListener("click", () => showUserDetail(button.closest("[data-uid]").dataset.uid));
-        });
-        list.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
-            checkbox.addEventListener("change", () => {
-                const uid = checkbox.closest("[data-uid]").dataset.uid;
-                if (checkbox.checked) selectedPointUserIds.add(uid); else selectedPointUserIds.delete(uid);
-                updateSelectedUserCount();
-            });
-        });
+    });
+};
+
+const loadAdminUsers = async (query = document.getElementById("admin-user-query")?.value.trim() || "") => {
+    const list = document.getElementById("admin-user-list");
+    list.innerHTML = '<p class="empty-history">正在載入使用者⋯⋯</p>';
+    try {
+        const response = await callListUsers({query});
+        window.renderAdminUsers(response.data, query);
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "管理員列表載入失敗"))}</p>`;
     }
@@ -457,15 +442,19 @@ const loadAdminUsers = async () => {
 const updateSelectedUserCount = () => {
     const count = document.getElementById("selected-user-count");
     if (count) count.textContent = `已選擇 ${selectedPointUserIds.size} 位使用者`;
+    const modalCount = document.getElementById("point-adjustment-selection");
+    if (modalCount) modalCount.textContent = `已選擇 ${selectedPointUserIds.size} 位使用者`;
+    document.getElementById("open-point-adjustment").disabled = selectedPointUserIds.size === 0;
 };
 
 const showUserDetail = (uid) => {
     const user = adminUsers.find((item) => item.uid === uid);
     if (!user) return;
+    selectedAdminUser = user;
     const detail = document.getElementById("admin-user-detail");
-    detail.hidden = false;
     detail.innerHTML = `
-        <div class="admin-inline-heading"><h3>使用者詳細資料</h3><button class="small-action-btn close-user-detail">關閉</button></div>
+        <div class="admin-inline-heading"><h2 id="admin-user-detail-title">使用者詳細資料</h2><button type="button" class="admin-modal-close" data-close-modal="admin-user-detail-modal" aria-label="關閉">×</button></div>
+        <div class="admin-modal-body">
         <dl class="user-detail-grid">
             <div><dt>真實姓名</dt><dd>${escapeHtml(user.realName || "尚未建立個人檔案")}</dd></div>
             <div><dt>公開暱稱</dt><dd>${escapeHtml(user.nickname || "—")}</dd></div>
@@ -474,29 +463,50 @@ const showUserDetail = (uid) => {
             <div><dt>目前／累積點數</dt><dd>${Number(user.points || 0)}／${Number(user.totalPoints || 0)}</dd></div>
             <div><dt>自我介紹</dt><dd>${escapeHtml(user.bio || "—")}</dd></div>
             <div><dt>最近登入</dt><dd>${escapeHtml(formatCampaignTime(user.lastSignInAt))}</dd></div>
-        </dl>`;
-    detail.querySelector(".close-user-detail").addEventListener("click", () => { detail.hidden = true; });
-    detail.scrollIntoView({behavior: "smooth", block: "start"});
+        </dl>
+        <div class="admin-detail-actions">
+            <button id="change-selected-role" class="admin-secondary-button" ${user.isSuperAdmin || user.disabled ? "disabled" : ""}>${user.isAdmin ? "撤銷管理員" : "設為管理員"}</button>
+        </div></div>`;
+    detail.querySelector("[data-close-modal]").addEventListener("click", () => closeAdminModal("admin-user-detail-modal"));
+    detail.querySelector("#change-selected-role")?.addEventListener("click", () => setSelectedAdminRole(!user.isAdmin));
+    openAdminModal("admin-user-detail-modal");
 };
 
 document.getElementById("batch-add-points").addEventListener("click", async (event) => {
     const points = Number(document.getElementById("batch-points").value);
     const reason = document.getElementById("batch-points-reason").value.trim();
     if (!selectedPointUserIds.size) return showToast("請先勾選至少一位使用者");
-    if (!Number.isInteger(points) || points < 1 || points > 1000) return showToast("點數必須是 1 至 1000 的整數");
-    if (!reason) return showToast("請輸入新增積分的理由");
+    if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) return showToast("請輸入 -1000 至 1000 之間的非零整數");
+    if (!reason) return showToast("請輸入調整積分的理由");
     const button = event.currentTarget;
     button.disabled = true;
     try {
         const response = await callBatchAddPoints({userIds: [...selectedPointUserIds], points, reason});
-        showToast(`已為 ${response.data.updated} 位使用者新增 ${points} 點`);
+        showToast(`已為 ${response.data.updated} 位使用者${points > 0 ? "新增" : "扣除"} ${Math.abs(points)} 點`);
         document.getElementById("batch-points-reason").value = "";
-        await loadAdminUsers();
+        closeAdminModal("point-adjustment-modal");
+        await loadAdminUsers(document.getElementById("admin-user-query").value.trim());
     } catch (error) {
-        showToast(callableErrorMessage(error, "批次新增積分失敗"));
+        showToast(callableErrorMessage(error, "調整積分失敗"));
     } finally {
         button.disabled = false;
     }
+});
+
+document.getElementById("admin-user-search").addEventListener("submit", (event) => {
+    event.preventDefault();
+    loadAdminUsers(document.getElementById("admin-user-query").value.trim());
+});
+
+document.getElementById("clear-admin-user-search").addEventListener("click", () => {
+    document.getElementById("admin-user-query").value = "";
+    loadAdminUsers("");
+});
+
+document.getElementById("open-point-adjustment").addEventListener("click", () => {
+    if (!selectedPointUserIds.size) return;
+    updateSelectedUserCount();
+    openAdminModal("point-adjustment-modal");
 });
 
 const formatWishTime = (millis) => {
@@ -551,6 +561,7 @@ const announcementCategoryLabels = {
     reward: "兌換活動"
 };
 let adminAnnouncements = [];
+const plainTextHtml = (content) => escapeHtml(content).replaceAll("\n", "<br>");
 
 const resetAnnouncementForm = () => {
     document.getElementById("announcement-id").value = "";
@@ -569,11 +580,12 @@ const editAnnouncement = (announcementId) => {
     document.getElementById("announcement-id").value = announcement.id;
     document.getElementById("announcement-title").value = announcement.title;
     document.getElementById("announcement-category").value = announcement.category;
-    document.getElementById("announcement-content").innerHTML = announcement.contentHtml || escapeHtml(announcement.content);
+    document.getElementById("announcement-content").innerHTML = announcement.contentHtml || plainTextHtml(announcement.content);
     document.getElementById("announcement-published").checked = announcement.published;
     document.getElementById("announcement-form-title").textContent = "編輯公告";
     document.getElementById("save-announcement").textContent = "更新公告";
     document.getElementById("cancel-announcement-edit").hidden = false;
+    openAdminModal("announcement-form-modal");
     document.getElementById("announcement-title").focus();
 };
 
@@ -592,7 +604,7 @@ const loadAnnouncements = async () => {
                     </div>
                     <span class="campaign-status ${announcement.published ? "active" : ""}">${announcement.published ? "已發佈" : "草稿"}</span>
                 </div>
-                <div class="admin-wish-message admin-rich-preview">${announcement.contentHtml || escapeHtml(announcement.content)}</div>
+                <div class="admin-wish-message admin-rich-preview">${announcement.contentHtml || plainTextHtml(announcement.content)}</div>
                 <div class="campaign-actions">
                     <button type="button" class="small-action-btn edit-announcement">編輯</button>
                     <button type="button" class="small-action-btn delete-announcement">刪除</button>
@@ -620,6 +632,7 @@ document.getElementById("save-announcement").addEventListener("click", async (ev
     try {
         await callSaveAnnouncement({id, title, contentHtml, category, published});
         showToast(id ? "公告已更新" : published ? "公告已發佈" : "草稿已儲存");
+        closeAdminModal("announcement-form-modal");
         resetAnnouncementForm();
         await loadAnnouncements();
     } catch (error) {
@@ -629,7 +642,15 @@ document.getElementById("save-announcement").addEventListener("click", async (ev
     }
 });
 
-document.getElementById("cancel-announcement-edit").addEventListener("click", resetAnnouncementForm);
+document.getElementById("cancel-announcement-edit").addEventListener("click", () => {
+    closeAdminModal("announcement-form-modal");
+    resetAnnouncementForm();
+});
+
+document.getElementById("open-announcement-form").addEventListener("click", () => {
+    resetAnnouncementForm();
+    openAdminModal("announcement-form-modal");
+});
 
 document.querySelectorAll(".wysiwyg-toolbar [data-command]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -725,12 +746,8 @@ document.getElementById("admin-wish-list").addEventListener("click", async (even
     }
 });
 
-document.getElementById("lookup-admin-user").addEventListener("click", lookupAdminUser);
-document.getElementById("admin-user-email").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") lookupAdminUser();
-});
 document.getElementById("refresh-campaigns").addEventListener("click", loadQrCampaigns);
-document.getElementById("refresh-admins").addEventListener("click", loadAdminUsers);
+document.getElementById("refresh-admins").addEventListener("click", () => loadAdminUsers());
 document.getElementById("refresh-wishes").addEventListener("click", loadAdminWishes);
 document.getElementById("admin-wish-filter").addEventListener("change", renderAdminWishes);
 document.getElementById("refresh-announcements").addEventListener("click", loadAnnouncements);

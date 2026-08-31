@@ -6,8 +6,8 @@
     <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花｜管理後台</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=10">
-    <link rel="stylesheet" href="/admin/admin.css?v=5">
+    <link rel="stylesheet" href="/style.css?v=12">
+    <link rel="stylesheet" href="/admin/admin.css?v=6">
 </head>
 <body class="admin-page">
     <div id="toast" role="status" aria-live="polite">提示訊息</div>
@@ -71,11 +71,25 @@
                     <p class="admin-kicker">QR CAMPAIGNS</p>
                     <h2>活動 QR code</h2>
                 </div>
-                <button id="refresh-campaigns" class="small-action-btn">重新整理</button>
+                <div class="admin-header-actions">
+                    <button id="refresh-campaigns" class="small-action-btn">重新整理</button>
+                    <button id="open-campaign-form" class="admin-primary-button">新增</button>
+                </div>
             </div>
-            <div class="admin-grid">
-                <div class="admin-card">
-                    <h3>建立活動</h3>
+            <div class="admin-card">
+                <div class="admin-inline-heading"><h3>活動列表</h3><span class="admin-help">依建立時間排序</span></div>
+                <div id="admin-campaign-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
+            </div>
+        </section>
+
+        <div id="campaign-form-modal" class="admin-modal" hidden>
+            <button class="admin-modal-backdrop" type="button" data-close-modal="campaign-form-modal" aria-label="關閉新增活動視窗"></button>
+            <section class="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="campaign-form-title">
+                <div class="admin-inline-heading">
+                    <h2 id="campaign-form-title">新增活動 QR code</h2>
+                    <button type="button" class="admin-modal-close" data-close-modal="campaign-form-modal" aria-label="關閉">×</button>
+                </div>
+                <div class="admin-modal-body">
                     <div class="form-group">
                         <label for="admin-campaign-title">活動名稱</label>
                         <input id="admin-campaign-title" type="text" maxlength="80" placeholder="例：午間永續野餐會">
@@ -98,55 +112,79 @@
                     </div>
                     <button id="create-campaign" class="admin-primary-button">建立 QR code</button>
                 </div>
-                <div class="admin-card">
-                    <h3>活動列表</h3>
-                    <div id="admin-campaign-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
+            </section>
+        </div>
+
+        <div id="qr-preview-modal" class="admin-modal" hidden>
+            <button class="admin-modal-backdrop" type="button" data-close-modal="qr-preview-modal" aria-label="關閉 QR code 視窗"></button>
+            <section id="qr-preview-card" class="admin-modal-panel qr-preview-card" role="dialog" aria-modal="true" aria-labelledby="qr-preview-title">
+                <div class="admin-inline-heading">
+                    <h2 id="qr-preview-title">活動 QR code</h2>
+                    <button type="button" class="admin-modal-close" data-close-modal="qr-preview-modal" aria-label="關閉">×</button>
                 </div>
-            </div>
-            <div class="admin-card qr-preview-card" id="qr-preview-card" hidden>
-                <h3 id="qr-preview-title">活動 QR code</h3>
-                <div id="qr-preview-image" class="qr-preview-image"></div>
-                <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
-                <button id="download-qr" class="admin-primary-button">下載 SVG</button>
-            </div>
-        </section>
+                <div class="admin-modal-body">
+                    <div id="qr-preview-image" class="qr-preview-image"></div>
+                    <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
+                    <button id="download-qr" class="admin-primary-button">下載 SVG</button>
+                </div>
+            </section>
+        </div>
 
         <section id="admin-users" class="admin-section" data-admin-view="/admin/users" hidden>
             <div class="admin-section-heading">
                 <div>
                     <p class="admin-kicker">ACCESS CONTROL</p>
-                    <h2>管理員權限</h2>
+                    <h2>使用者列表</h2>
                 </div>
-                <button id="refresh-admins" class="small-action-btn">重新整理</button>
-            </div>
-            <div class="admin-grid">
-                <div class="admin-card">
-                    <h3>查詢使用者</h3>
-                    <p class="admin-help">使用者必須先登入網站一次，才能被設為管理員。</p>
-                    <div class="form-group">
-                        <label for="admin-user-email">使用者電子郵件</label>
-                        <input id="admin-user-email" type="email" maxlength="254" autocomplete="off" placeholder="user@example.com">
-                    </div>
-                    <button id="lookup-admin-user" class="admin-primary-button">查詢使用者</button>
-                    <div id="admin-user-result"></div>
-                </div>
-                <div class="admin-card">
-                    <h3>使用者列表</h3>
-                    <div id="admin-user-list"><p class="empty-history">正在載入管理員⋯⋯</p></div>
+                <div class="admin-header-actions">
+                    <button id="refresh-admins" class="small-action-btn">重新整理</button>
+                    <button id="open-point-adjustment" class="admin-primary-button" disabled>調整積分</button>
                 </div>
             </div>
-            <div class="admin-card point-management-card">
-                <h3>批次新增積分</h3>
-                <p class="admin-help">先在使用者列表勾選對象。每次操作都會寫入使用者積分帳本與管理員稽核紀錄。</p>
-                <div class="admin-point-grid">
-                    <div class="form-group"><label for="batch-points">新增點數</label><input id="batch-points" type="number" min="1" max="1000" value="1"></div>
-                    <div class="form-group"><label for="batch-points-reason">新增理由</label><input id="batch-points-reason" type="text" maxlength="200" placeholder="例：協助活動場佈"></div>
+            <form id="admin-user-search" class="admin-card admin-search-bar">
+                <div class="form-group">
+                    <label for="admin-user-query">查詢使用者</label>
+                    <input id="admin-user-query" type="search" maxlength="254" autocomplete="off" placeholder="輸入 Email、姓名或暱稱">
                 </div>
-                <p id="selected-user-count" class="admin-help">已選擇 0 位使用者</p>
-                <button id="batch-add-points" class="admin-primary-button">批次新增積分</button>
+                <button id="search-admin-users" type="submit" class="admin-primary-button">查詢</button>
+                <button id="clear-admin-user-search" type="button" class="admin-secondary-button">清除</button>
+            </form>
+            <div class="admin-card admin-list-card">
+                <div class="admin-user-table-header" aria-hidden="true">
+                    <span></span><span>使用者</span><span>Email</span><span>積分</span><span>權限</span><span></span>
+                </div>
+                <div id="admin-user-list"><p class="empty-history">正在載入使用者⋯⋯</p></div>
             </div>
-            <div id="admin-user-detail" class="admin-card admin-user-detail" hidden></div>
+            <p id="selected-user-count" class="admin-help admin-selection-summary">已選擇 0 位使用者</p>
         </section>
+
+        <div id="point-adjustment-modal" class="admin-modal" hidden>
+            <button class="admin-modal-backdrop" type="button" data-close-modal="point-adjustment-modal" aria-label="關閉調整積分視窗"></button>
+            <section class="admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="point-adjustment-title">
+                <div class="admin-inline-heading">
+                    <h2 id="point-adjustment-title">調整積分</h2>
+                    <button type="button" class="admin-modal-close" data-close-modal="point-adjustment-modal" aria-label="關閉">×</button>
+                </div>
+                <div class="admin-modal-body">
+                    <p id="point-adjustment-selection" class="admin-help">已選擇 0 位使用者</p>
+                    <div class="form-group">
+                        <label for="batch-points">調整點數</label>
+                        <input id="batch-points" type="number" min="-1000" max="1000" value="1">
+                        <p class="admin-help">輸入正數代表新增，負數代表扣除；不可調整為負餘額。</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="batch-points-reason">調整理由</label>
+                        <input id="batch-points-reason" type="text" maxlength="200" placeholder="例：協助活動場佈">
+                    </div>
+                    <button id="batch-add-points" class="admin-primary-button">確認調整</button>
+                </div>
+            </section>
+        </div>
+
+        <div id="admin-user-detail-modal" class="admin-modal" hidden>
+            <button class="admin-modal-backdrop" type="button" data-close-modal="admin-user-detail-modal" aria-label="關閉使用者詳情"></button>
+            <section id="admin-user-detail" class="admin-modal-panel admin-user-detail" role="dialog" aria-modal="true" aria-labelledby="admin-user-detail-title"></section>
+        </div>
 
         <section id="admin-wishes" class="admin-section" data-admin-view="/admin/wishes" hidden>
             <div class="admin-section-heading">
@@ -169,18 +207,32 @@
                     <p class="admin-kicker">ANNOUNCEMENTS</p>
                     <h2>公佈欄</h2>
                 </div>
-                <button id="refresh-announcements" class="small-action-btn">重新整理</button>
+                <div class="admin-header-actions">
+                    <button id="refresh-announcements" class="small-action-btn">重新整理</button>
+                    <button id="open-announcement-form" class="admin-primary-button">新增</button>
+                </div>
             </div>
-            <div class="admin-grid">
-                <div class="admin-card">
-                    <h3 id="announcement-form-title">新增公告</h3>
+            <div class="admin-card">
+                <div class="admin-inline-heading"><h3>公告列表</h3><span class="admin-help">最新更新優先</span></div>
+                <div id="admin-announcement-list"><p class="empty-history">正在載入公告⋯⋯</p></div>
+            </div>
+        </section>
+
+        <div id="announcement-form-modal" class="admin-modal" hidden>
+            <button class="admin-modal-backdrop" type="button" data-close-modal="announcement-form-modal" aria-label="關閉公告視窗"></button>
+            <section class="admin-modal-panel admin-modal-panel-wide" role="dialog" aria-modal="true" aria-labelledby="announcement-form-title">
+                <div class="admin-inline-heading">
+                    <h2 id="announcement-form-title">新增公告</h2>
+                    <button type="button" class="admin-modal-close" data-close-modal="announcement-form-modal" aria-label="關閉">×</button>
+                </div>
+                <div class="admin-modal-body">
                     <input id="announcement-id" type="hidden">
                     <div class="form-group">
                         <label for="announcement-title">公告標題</label>
                         <input id="announcement-title" type="text" maxlength="80" placeholder="例：午間永續野餐會開始報名">
                     </div>
                     <div class="form-group">
-                        <label for="announcement-category">公告分類</label>
+                        <label for="announcement-category">公佈欄類型</label>
                         <select id="announcement-category">
                             <option value="general">重要公告</option>
                             <option value="event">活動消息</option>
@@ -207,15 +259,11 @@
                     <button id="save-announcement" class="admin-primary-button">儲存公告</button>
                     <button id="cancel-announcement-edit" class="admin-secondary-button admin-cancel-button" hidden>取消編輯</button>
                 </div>
-                <div class="admin-card">
-                    <h3>公告列表</h3>
-                    <div id="admin-announcement-list"><p class="empty-history">正在載入公告⋯⋯</p></div>
-                </div>
-            </div>
-        </section>
+            </section>
+        </div>
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=7"></script>
+    <script type="module" src="/admin/admin.js?v=8"></script>
 </body>
 </html>

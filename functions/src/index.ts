@@ -110,7 +110,7 @@ function adminUserSummary(user: UserRecord) {
 function sanitizeAnnouncementHtml(value: unknown): string {
   const html = requiredText(value, "公告內容", 10000);
   const sanitized = sanitizeHtml(html, {
-    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a"],
+    allowedTags: ["p", "div", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a"],
     allowedAttributes: {a: ["href", "target", "rel"]},
     allowedSchemes: ["http", "https", "mailto"],
     transformTags: {
@@ -651,8 +651,17 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
   }));
 });
 
-export const listPublicQrCampaigns = onCall(callableOptions, async () => {
-  const snapshot = await db.collection("qrCampaigns").orderBy("startsAt", "desc").limit(100).get();
+export const listPublicQrCampaigns = onCall(callableOptions, async (request) => {
+  const [snapshot, redemptionSnapshot] = await Promise.all([
+    db.collection("qrCampaigns").orderBy("startsAt", "desc").limit(100).get(),
+    request.auth ? db.collection("qrRedemptions")
+      .where("uid", "==", request.auth.uid)
+      .limit(500)
+      .get() : null,
+  ]);
+  const redeemedCampaignIds = new Set((redemptionSnapshot?.docs ?? [])
+    .map((item) => item.data().campaignId)
+    .filter((campaignId): campaignId is string => typeof campaignId === "string"));
   return snapshot.docs.map((item) => {
     const data = item.data();
     return {
@@ -663,6 +672,7 @@ export const listPublicQrCampaigns = onCall(callableOptions, async () => {
       active: data.active === true,
       startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
       endsAt: data.endsAt instanceof Timestamp ? data.endsAt.toMillis() : null,
+      redeemed: redeemedCampaignIds.has(item.id),
     };
   }).filter((campaign) => campaign.active);
 });
@@ -725,25 +735,50 @@ export const listAdminUsers = onCall(callableOptions, async (request) => {
 
 export const listUsers = onCall(callableOptions, async (request) => {
   requireAdmin(request);
-  const page = await adminAuth.listUsers(1000);
-  const publicProfiles = await db.getAll(...page.users.map((user) => db.doc(`users/${user.uid}`)));
-  const privateProfiles = await db.getAll(...page.users.map((user) => db.doc(`usersPrivate/${user.uid}`)));
-  return page.users
-    .map((user, index) => {
-      const summary = adminUserSummary(user);
-      const publicData = publicProfiles[index].data() ?? {};
-      const privateData = privateProfiles[index].data() ?? {};
-      const profile = sanitizePublicProfile(publicData);
-      return {
-        ...summary,
-        ...profile,
-        realName: typeof privateData.realName === "string" ? privateData.realName :
-          typeof publicData.realName === "string" ? publicData.realName : "",
-        createdAt: privateData.createdAt instanceof Timestamp ? privateData.createdAt.toMillis() : null,
-        lastSignInAt: user.metadata.lastSignInTime ? Date.parse(user.metadata.lastSignInTime) : null,
-      };
-    })
-    .sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.email.localeCompare(b.email));
+  const searchText = optionalText(request.data?.query, "查詢文字", 254).toLocaleLowerCase("zh-TW");
+  const users: Array<ReturnType<typeof adminUserSummary> & PublicProfile & {
+    realName: string;
+    createdAt: number | null;
+    lastSignInAt: number | null;
+  }> = [];
+  let pageToken: string | undefined;
+  let pagesRead = 0;
+
+  do {
+    const page = await adminAuth.listUsers(1000, pageToken);
+    if (page.users.length) {
+      const publicProfiles = await db.getAll(...page.users.map((user) => db.doc(`users/${user.uid}`)));
+      const privateProfiles = await db.getAll(...page.users.map((user) =>
+        db.doc(`usersPrivate/${user.uid}`)));
+      page.users.forEach((user, index) => {
+        const summary = adminUserSummary(user);
+        const publicData = publicProfiles[index].data() ?? {};
+        const privateData = privateProfiles[index].data() ?? {};
+        const profile = sanitizePublicProfile(publicData);
+        const realName = typeof privateData.realName === "string" ? privateData.realName :
+          typeof publicData.realName === "string" ? publicData.realName : "";
+        const createdAt = privateData.createdAt instanceof Timestamp ? privateData.createdAt.toMillis() :
+          user.metadata.creationTime ? Date.parse(user.metadata.creationTime) : null;
+        const searchable = [summary.email, summary.displayName, profile.nickname, realName]
+          .join("\n").toLocaleLowerCase("zh-TW");
+        if (!searchText || searchable.includes(searchText)) {
+          users.push({
+            ...summary,
+            ...profile,
+            realName,
+            createdAt,
+            lastSignInAt: user.metadata.lastSignInTime ? Date.parse(user.metadata.lastSignInTime) : null,
+          });
+        }
+      });
+    }
+    pageToken = page.pageToken;
+    pagesRead += 1;
+  } while (pageToken && pagesRead < 10);
+
+  return users
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || a.email.localeCompare(b.email))
+    .slice(0, 10);
 });
 
 export const batchAddPoints = onCall(callableOptions, async (request) => {
@@ -754,8 +789,11 @@ export const batchAddPoints = onCall(callableOptions, async (request) => {
   }
   const userIds = [...new Set(request.data.userIds.map((value: unknown) =>
     requiredText(value, "使用者代碼", 128)))];
-  const points = positiveInteger(request.data?.points, "新增點數", 1000);
-  const reason = requiredText(request.data?.reason, "新增理由", 200);
+  const points = Number(request.data?.points);
+  if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 1000) {
+    throw new HttpsError("invalid-argument", "調整點數必須是 -1000 至 1000 之間的非零整數");
+  }
+  const reason = requiredText(request.data?.reason, "調整理由", 200);
   const auditRef = db.collection("adminAuditLogs").doc();
 
   await db.runTransaction(async (transaction) => {
@@ -764,12 +802,15 @@ export const batchAddPoints = onCall(callableOptions, async (request) => {
     if (snapshots.some((snapshot) => !snapshot.exists)) {
       throw new HttpsError("not-found", "部分使用者尚未建立個人檔案");
     }
+    if (points < 0 && snapshots.some((snapshot) => numberOrZero(snapshot.data()?.points) + points < 0)) {
+      throw new HttpsError("failed-precondition", "部分使用者的積分不足，無法完成扣除");
+    }
     snapshots.forEach((snapshot) => {
       const uid = snapshot.id;
       const ledgerRef = db.collection(`usersPrivate/${uid}/pointLedger`).doc();
       transaction.update(snapshot.ref, {
         points: FieldValue.increment(points),
-        totalPoints: FieldValue.increment(points),
+        ...(points > 0 ? {totalPoints: FieldValue.increment(points)} : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
       transaction.create(ledgerRef, {
@@ -783,7 +824,7 @@ export const batchAddPoints = onCall(callableOptions, async (request) => {
       });
     });
     transaction.create(auditRef, {
-      action: "batch_add_points",
+      action: "batch_adjust_points",
       actorUid: request.auth.uid,
       actorEmail: request.auth.token.email ?? "",
       targetUids: userIds,

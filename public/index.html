@@ -6,7 +6,7 @@
     <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=10">
+    <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 
@@ -296,6 +296,14 @@
                 <h2 class="section-title">公佈欄</h2>
                 <p class="section-desc">活動消息、新功能與小火花的重要通知都會放在這裡。</p>
             </div>
+            <label class="announcement-filter-label" for="announcement-filter">顯示類型</label>
+            <select id="announcement-filter" class="announcement-filter">
+                <option value="all">全部公告</option>
+                <option value="general">重要公告</option>
+                <option value="event">活動消息</option>
+                <option value="update">功能更新</option>
+                <option value="reward">兌換活動</option>
+            </select>
             <div id="announcement-list" class="announcement-list">
                 <div class="announcement-empty">
                     <img src="spark1.png" alt="小火花">
@@ -356,7 +364,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=13"></script>
+<script type="module" src="script.js?v=15"></script>
 
 </body>
 </html>

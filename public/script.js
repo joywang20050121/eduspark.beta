@@ -674,6 +674,31 @@ window.openWishPool = () => {
 
 const formatActivityRange = (start, end) => `${formatWishTime(start)} ～ ${formatWishTime(end)}`;
 
+window.renderActivities = (campaigns) => {
+    const list = document.getElementById('activity-list');
+    if (!list) return;
+    list.innerHTML = campaigns.length ? campaigns.map(campaign => `
+        <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
+            <span class="activity-card-content">
+                <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
+                <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
+                <span class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</span>
+            </span>
+            ${campaign.redeemed ? `
+                <span class="activity-redeemed-check" aria-label="已兌換" title="已兌換">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m7 12.5 3.2 3.2L17.5 8.5"/>
+                    </svg>
+                </span>` : ''}
+        </button>`).join('') : '<p class="empty-history">目前沒有活動，敬請期待！</p>';
+    list.querySelectorAll('[data-activity-id]').forEach(button => {
+        button.addEventListener('click', () => {
+            const campaign = campaigns.find(item => item.id === button.dataset.activityId);
+            if (campaign) window.openActivityDetail(campaign);
+        });
+    });
+};
+
 window.loadActivities = async () => {
     const list = document.getElementById('activity-list');
     if (!list) return;
@@ -681,18 +706,7 @@ window.loadActivities = async () => {
     try {
         const response = await callListPublicQrCampaigns();
         const campaigns = Array.isArray(response.data) ? response.data : [];
-        list.innerHTML = campaigns.length ? campaigns.map(campaign => `
-            <button class="activity-card" type="button" data-activity-id="${escapeHtml(campaign.id)}">
-                <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
-                <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
-                <span class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</span>
-            </button>`).join('') : '<p class="empty-history">目前沒有活動，敬請期待！</p>';
-        list.querySelectorAll('[data-activity-id]').forEach(button => {
-            button.addEventListener('click', () => {
-                const campaign = campaigns.find(item => item.id === button.dataset.activityId);
-                if (campaign) window.openActivityDetail(campaign);
-            });
-        });
+        window.renderActivities(campaigns);
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '活動載入失敗'))}</p>`;
     }
@@ -714,6 +728,32 @@ window.closeActivityDetail = () => {
     document.getElementById('activity-detail-overlay')?.classList.remove('active');
 };
 
+const pointHistoryTypeLabels = {
+    qr: '活動兌換',
+    reward: '獎勵兌換',
+    admin: '管理員調整'
+};
+
+window.renderPointHistory = (history) => {
+    const list = document.getElementById('point-history-list');
+    if (!list) return;
+    list.innerHTML = history.length ? history.map(item => {
+        const type = Object.hasOwn(pointHistoryTypeLabels, item.type) ? item.type : 'other';
+        const typeLabel = pointHistoryTypeLabels[type] || '積分異動';
+        return `
+            <article class="point-history-item">
+                <div>
+                    <span class="point-history-title-row">
+                        <strong>${escapeHtml(item.label)}</strong>
+                        <span class="point-history-tag ${escapeHtml(type)}">${escapeHtml(typeLabel)}</span>
+                    </span>
+                    <time>${escapeHtml(formatWishTime(item.createdAt))}</time>
+                </div>
+                <span class="point-delta ${Number(item.delta) >= 0 ? 'positive' : 'negative'}">${Number(item.delta) >= 0 ? '+' : ''}${Number(item.delta)}</span>
+            </article>`;
+    }).join('') : '<p class="empty-history">目前還沒有積分異動紀錄。</p>';
+};
+
 window.loadPointHistory = async () => {
     const list = document.getElementById('point-history-list');
     if (!list) return;
@@ -725,11 +765,7 @@ window.loadPointHistory = async () => {
     try {
         const response = await callGetPointHistory();
         const history = Array.isArray(response.data) ? response.data : [];
-        list.innerHTML = history.length ? history.map(item => `
-            <article class="point-history-item">
-                <div><strong>${escapeHtml(item.label)}</strong><time>${escapeHtml(formatWishTime(item.createdAt))}</time></div>
-                <span class="point-delta ${Number(item.delta) >= 0 ? 'positive' : 'negative'}">${Number(item.delta) >= 0 ? '+' : ''}${Number(item.delta)}</span>
-            </article>`).join('') : '<p class="empty-history">目前還沒有積分異動紀錄。</p>';
+        window.renderPointHistory(history);
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '積分紀錄載入失敗'))}</p>`;
     }
@@ -747,6 +783,36 @@ const announcementCategoryLabels = {
     update: '功能更新',
     reward: '兌換活動'
 };
+let publishedAnnouncements = [];
+
+const plainAnnouncementHtml = (content) => escapeHtml(content).replaceAll('\n', '<br>');
+
+window.renderAnnouncements = () => {
+    const list = document.getElementById('announcement-list');
+    if (!list) return;
+    const selectedCategory = document.getElementById('announcement-filter')?.value || 'all';
+    const announcements = selectedCategory === 'all'
+        ? publishedAnnouncements
+        : publishedAnnouncements.filter(announcement => announcement.category === selectedCategory);
+    if (!announcements.length) {
+        list.innerHTML = `
+            <div class="announcement-empty">
+                <img src="spark1.png" alt="小火花">
+                <h3>${publishedAnnouncements.length ? '此類型目前沒有公告' : '敬請期待'}</h3>
+            </div>`;
+        return;
+    }
+    list.innerHTML = announcements.map(announcement => `
+        <article class="announcement-card announcement-${escapeHtml(announcement.category)}">
+            <div class="announcement-meta">
+                <span>${escapeHtml(announcementCategoryLabels[announcement.category] || '重要公告')}</span>
+                <time>${escapeHtml(formatWishTime(announcement.updatedAt))}</time>
+            </div>
+            <h3>${escapeHtml(announcement.title)}</h3>
+            <div class="announcement-rich-content">${announcement.contentHtml || plainAnnouncementHtml(announcement.content)}</div>
+        </article>
+    `).join('');
+};
 
 window.loadAnnouncements = async () => {
     const list = document.getElementById('announcement-list');
@@ -754,30 +820,15 @@ window.loadAnnouncements = async () => {
     list.innerHTML = '<p class="empty-history">正在載入公告⋯⋯</p>';
     try {
         const response = await callListPublishedAnnouncements();
-        const announcements = Array.isArray(response.data) ? response.data : [];
-        if (!announcements.length) {
-            list.innerHTML = `
-                <div class="announcement-empty">
-                    <img src="spark1.png" alt="小火花">
-                    <h3>敬請期待</h3>
-                </div>`;
-            return;
-        }
-        list.innerHTML = announcements.map(announcement => `
-            <article class="announcement-card announcement-${escapeHtml(announcement.category)}">
-                <div class="announcement-meta">
-                    <span>${escapeHtml(announcementCategoryLabels[announcement.category] || '重要公告')}</span>
-                    <time>${escapeHtml(formatWishTime(announcement.updatedAt))}</time>
-                </div>
-                <h3>${escapeHtml(announcement.title)}</h3>
-                <div class="announcement-rich-content">${announcement.contentHtml || escapeHtml(announcement.content)}</div>
-            </article>
-        `).join('');
+        publishedAnnouncements = Array.isArray(response.data) ? response.data : [];
+        window.renderAnnouncements();
     } catch (error) {
         console.error('載入公佈欄失敗：', error);
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '公佈欄載入失敗'))}</p>`;
     }
 };
+
+document.getElementById('announcement-filter')?.addEventListener('change', window.renderAnnouncements);
 
 document.getElementById('wish-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();

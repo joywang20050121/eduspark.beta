@@ -102,11 +102,43 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_COESPARK_A3F6E }}
 
-      - name: Deploy to Firebase production
+      - name: Deploy Firestore and Hosting
         run: >-
           ./functions/node_modules/.bin/firebase deploy
           --project coespark-a3f6e
-          --only functions,firestore,hosting
+          --only firestore,hosting
+          --non-interactive
+
+      - name: Deploy Functions batch 1
+        run: >-
+          ./functions/node_modules/.bin/firebase deploy
+          --project coespark-a3f6e
+          --only
+          functions:getMyProfile,functions:bootstrapSuperAdmin,functions:saveProfile,functions:createWish,functions:listWishes,functions:deleteWish
+          --non-interactive
+
+      - name: Deploy Functions batch 2
+        run: >-
+          ./functions/node_modules/.bin/firebase deploy
+          --project coespark-a3f6e
+          --only
+          functions:listPublishedAnnouncements,functions:listAnnouncements,functions:saveAnnouncement,functions:deleteAnnouncement,functions:redeemReward,functions:redeemQr
+          --non-interactive
+
+      - name: Deploy Functions batch 3
+        run: >-
+          ./functions/node_modules/.bin/firebase deploy
+          --project coespark-a3f6e
+          --only
+          functions:createQrCampaign,functions:listQrCampaigns,functions:listPublicQrCampaigns,functions:getQrCampaign,functions:setQrCampaignStatus,functions:lookupAdminUser
+          --non-interactive
+
+      - name: Deploy Functions batch 4
+        run: >-
+          ./functions/node_modules/.bin/firebase deploy
+          --project coespark-a3f6e
+          --only
+          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getPointHistory,functions:setAdminRole
           --non-interactive
 
       - name: Verify production site

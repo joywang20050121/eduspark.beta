@@ -14,8 +14,9 @@ setGlobalOptions({
   region: "asia-east1",
   memory: "256MiB",
   timeoutSeconds: 30,
-  concurrency: 80,
-  maxInstances: 5,
+  cpu: "gcf_gen1",
+  concurrency: 1,
+  maxInstances: 20,
 });
 
 const db = getFirestore();

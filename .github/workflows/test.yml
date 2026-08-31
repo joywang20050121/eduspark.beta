@@ -117,6 +117,9 @@ jobs:
           functions:getMyProfile,functions:bootstrapSuperAdmin,functions:saveProfile,functions:createWish,functions:listWishes,functions:deleteWish
           --non-interactive
 
+      - name: Allow previous revisions to scale down
+        run: sleep 60
+
       - name: Deploy Functions batch 2
         run: >-
           ./functions/node_modules/.bin/firebase deploy
@@ -125,6 +128,9 @@ jobs:
           functions:listPublishedAnnouncements,functions:listAnnouncements,functions:saveAnnouncement,functions:deleteAnnouncement,functions:redeemReward,functions:redeemQr
           --non-interactive
 
+      - name: Allow previous revisions to scale down
+        run: sleep 60
+
       - name: Deploy Functions batch 3
         run: >-
           ./functions/node_modules/.bin/firebase deploy
@@ -132,6 +138,9 @@ jobs:
           --only
           functions:createQrCampaign,functions:listQrCampaigns,functions:listPublicQrCampaigns,functions:getQrCampaign,functions:setQrCampaignStatus,functions:lookupAdminUser
           --non-interactive
+
+      - name: Allow previous revisions to scale down
+        run: sleep 60
 
       - name: Deploy Functions batch 4
         run: >-

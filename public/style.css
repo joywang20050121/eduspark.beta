@@ -57,6 +57,11 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+@keyframes sparkFloat {
+    0%, 100% { transform: translateY(0) scale(var(--spark-image-scale)); }
+    50% { transform: translateY(-7px) scale(var(--spark-image-scale)); }
+}
+
 button {
     transition: transform 0.2s ease, background-color 0.2s ease;
 }
@@ -250,10 +255,12 @@ button:active { transform: scale(0.97) !important; }
 }
 
 .spark-level-image {
+    --spark-image-scale: 1.18;
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transform: scale(1.18);
+    animation: sparkFloat 3.2s ease-in-out infinite;
+    transform: scale(var(--spark-image-scale));
     transition: opacity .25s ease, transform .35s ease;
 }
 
@@ -394,7 +401,7 @@ button:active { transform: scale(0.97) !important; }
     .home-points-button span { margin-top: 8px; font-size: 14px; }
 
     .spark-character-stage { width: min(100%, 294px); height: 278px; border-radius: 26px; }
-    .spark-level-image { object-fit: contain; transform: none; }
+    .spark-level-image { --spark-image-scale: 1; object-fit: contain; }
     .spark-level-kicker { margin-top: 15px; font-size: 12px; }
     .spark-level-name { margin-top: 3px; font-size: 25px; letter-spacing: .08em; }
     .spark-level-progress { width: min(100%, 250px); height: 15px; margin-top: 13px; border-width: 3px; }
@@ -1303,8 +1310,9 @@ button:active { transform: scale(0.97) !important; }
 
 .wish-message-card {
     position: relative;
+    overflow: hidden;
     border: 0;
-    border-radius: 8px 20px 20px 20px;
+    border-radius: 20px;
     padding: 17px 17px 16px 20px;
     background: rgba(255, 255, 255, 0.74);
     box-shadow: 0 7px 20px rgba(69, 82, 76, 0.07);
@@ -1316,7 +1324,7 @@ button:active { transform: scale(0.97) !important; }
     bottom: 0;
     left: 0;
     width: 5px;
-    border-radius: 8px 0 0 8px;
+    border-radius: 20px 0 0 20px;
     background: var(--color-lightgreen);
     content: '';
 }
@@ -1369,6 +1377,13 @@ button:active { transform: scale(0.97) !important; }
 }
 
 .wish-admin-reply p { margin-top: 5px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .spark-level-image {
+        animation: none;
+        transform: scale(var(--spark-image-scale));
+    }
+}
 
 .wish-composer {
     position: sticky;

@@ -45,7 +45,7 @@ test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page
     expect(stageBox.width).toBeLessThanOrEqual(294);
     expect(stageBox.height).toBeCloseTo(244, 1);
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
-    await expect(page.locator('#spark-level-image')).toHaveCSS('transform', 'none');
+    await expect(page.locator('#spark-level-image')).toHaveCSS('animation-name', 'sparkFloat');
     await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
     await expect(page.locator('.home-scan-button')).toHaveCSS('font-size', '17px');
 });
@@ -126,6 +126,8 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
     await expect(page.locator('#wish-list')).toContainText('希望多一些交流活動');
     await expect(page.locator('#wish-list')).toContainText('謝謝你的建議，我們會安排看看！');
     await expect(page.locator('.wish-admin-reply')).toContainText('小火花管理員回覆');
+    await expect(page.locator('.wish-message-card')).toHaveCSS('border-radius', '20px');
+    await expect(page.locator('.wish-message-card')).toHaveCSS('overflow', 'hidden');
     await expect(page.locator('#wish-form')).toBeHidden();
     await expect(page.locator('#wish-guest-note')).toBeVisible();
 });

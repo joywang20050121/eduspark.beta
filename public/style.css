@@ -398,7 +398,11 @@ button:active { transform: scale(0.97) !important; }
     .home-logo { width: 42px; height: 42px; }
     .home-points-button { width: 36px; height: 43px; }
     .home-points-button svg { inset: 2px 3px; width: 30px; height: 39px; }
-    .home-points-button span { margin-top: 8px; font-size: 12px; }
+    .home-points-button > .global-points {
+        margin-top: 12px;
+        font-size: 12px;
+        line-height: 1;
+    }
 
     .spark-character-stage { width: min(100%, 294px); height: 278px; border-radius: 26px; }
     .spark-level-image { --spark-image-scale: 1; object-fit: contain; }

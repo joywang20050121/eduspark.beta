@@ -730,7 +730,7 @@ window.renderActivities = (campaigns) => {
             <span class="activity-card-content">
                 <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
                 <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
-                <span class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</span>
+                <span class="activity-card-points">${campaign.redeemed ? '已獲得' : '完成可獲得'} ${Number(campaign.points)} 點</span>
             </span>
             ${campaign.redeemed ? `
                 <span class="activity-redeemed-check" aria-label="已兌換" title="已兌換">

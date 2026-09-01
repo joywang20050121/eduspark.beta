@@ -205,7 +205,11 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     const redeemed = page.locator('[data-activity-id="redeemed-campaign"]');
     await expect(redeemed).toHaveClass(/redeemed/);
     await expect(redeemed.getByLabel('已兌換')).toBeVisible();
-    await expect(page.locator('[data-activity-id="available-campaign"]')).not.toHaveClass(/redeemed/);
+    await expect(redeemed).toContainText('已獲得 5 點');
+    await expect(redeemed).not.toContainText('完成可獲得');
+    const available = page.locator('[data-activity-id="available-campaign"]');
+    await expect(available).not.toHaveClass(/redeemed/);
+    await expect(available).toContainText('完成可獲得 3 點');
 });
 
 test('活動詳情保留後台輸入的換行與空白', async ({page}) => {

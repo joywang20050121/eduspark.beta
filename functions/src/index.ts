@@ -6,7 +6,13 @@ import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import QRCode from "qrcode";
 import sanitizeHtml from "sanitize-html";
-import {optionalText, positiveInteger, requiredText, timestampMillis} from "./validation";
+import {
+  optionalText,
+  positiveInteger,
+  requiredPreservedText,
+  requiredText,
+  timestampMillis,
+} from "./validation";
 
 initializeApp();
 
@@ -368,8 +374,39 @@ export const listWishes = onCall(callableOptions, async (request) => {
       authorName: anonymous ? "匿名" : typeof data.authorName === "string" ?
         data.authorName : "小火花夥伴",
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
+      adminReply: typeof data.adminReply === "string" ? data.adminReply : "",
+      repliedAt: data.repliedAt instanceof Timestamp ? data.repliedAt.toMillis() : null,
     };
   });
+});
+
+export const replyWish = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const wishId = requiredText(request.data?.wishId, "留言代碼", 128);
+  const reply = requiredText(request.data?.reply, "回覆內容", 1000);
+  const wishRef = db.doc(`wishes/${wishId}`);
+  const auditRef = db.collection("adminAuditLogs").doc();
+  const repliedAt = Timestamp.now();
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(wishRef);
+    if (!snapshot.exists) throw new HttpsError("not-found", "找不到這則留言");
+    transaction.update(wishRef, {
+      adminReply: reply,
+      repliedAt,
+      repliedBy: request.auth.uid,
+    });
+    transaction.create(auditRef, {
+      action: "reply_wish",
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email ?? "",
+      targetId: wishId,
+      targetAuthorUid: snapshot.data()?.authorUid ?? "",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return {id: wishId, adminReply: reply, repliedAt: repliedAt.toMillis()};
 });
 
 export const deleteWish = onCall(callableOptions, async (request) => {
@@ -601,19 +638,28 @@ function campaignUrl(campaignId: string): string {
 
 async function campaignQr(campaignId: string) {
   const url = campaignUrl(campaignId);
-  const svg = await QRCode.toString(url, {
-    type: "svg",
-    errorCorrectionLevel: "M",
+  const options = {
+    errorCorrectionLevel: "M" as const,
     margin: 2,
     width: 720,
-  });
-  return {url, svg};
+  };
+  const [svg, pngDataUrl] = await Promise.all([
+    QRCode.toString(url, {
+      type: "svg",
+      ...options,
+    }),
+    QRCode.toDataURL(url, {
+      type: "image/png",
+      ...options,
+    }),
+  ]);
+  return {url, svg, pngDataUrl};
 }
 
 export const createQrCampaign = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const title = requiredText(request.data?.title, "活動名稱", 80);
-  const description = requiredText(request.data?.description, "活動內文", 2000);
+  const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = positiveInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
@@ -641,7 +687,7 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const campaignId = requiredText(request.data?.campaignId, "活動代碼", 64);
   const title = requiredText(request.data?.title, "活動名稱", 80);
-  const description = requiredText(request.data?.description, "活動內文", 2000);
+  const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = positiveInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");

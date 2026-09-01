@@ -95,6 +95,7 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
                 authorName: '匿名',
                 anonymous: true,
                 category: 'suggestion',
+                adminReply: '謝謝你的建議，我們會安排看看！',
                 createdAt: Date.now()
             }]})
         });
@@ -105,6 +106,8 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
 
     await expect(page.locator('#view-wishes')).toHaveClass(/active/);
     await expect(page.locator('#wish-list')).toContainText('希望多一些交流活動');
+    await expect(page.locator('#wish-list')).toContainText('謝謝你的建議，我們會安排看看！');
+    await expect(page.locator('.wish-admin-reply')).toContainText('小火花管理員回覆');
     await expect(page.locator('#wish-form')).toBeHidden();
     await expect(page.locator('#wish-guest-note')).toBeVisible();
 });
@@ -184,6 +187,21 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     await expect(page.locator('[data-activity-id="available-campaign"]')).not.toHaveClass(/redeemed/);
 });
 
+test('活動詳情保留後台輸入的換行與空白', async ({page}) => {
+    await openApp(page);
+    await page.evaluate(() => window.openActivityDetail({
+        title: '排版測試活動',
+        description: '第一段\n\n  保留縮排的第二段',
+        points: 3,
+        startsAt: Date.now() - 60_000,
+        endsAt: Date.now() + 60_000
+    }));
+
+    const description = page.locator('.activity-detail-description');
+    await expect(description).toHaveText('第一段\n\n  保留縮排的第二段');
+    await expect(description).toHaveCSS('white-space', 'pre-wrap');
+});
+
 test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({page}) => {
     await page.route('**/getQrCampaign', async route => {
         await route.fulfill({
@@ -213,10 +231,14 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     });
 
     await expect(page.locator('#admin-campaign-list')).toBeVisible();
+    await expect(page.getByRole('button', {name: '重新整理'})).toHaveCount(0);
     await page.locator('#open-campaign-form').click();
     const campaignDialog = page.getByRole('dialog', {name: '新增活動 QR code'});
     await expect(campaignDialog).toBeVisible();
     await campaignDialog.getByRole('button', {name: '關閉', exact: true}).click();
+    await expect(page.locator('#download-qr')).toHaveText('下載 PNG');
+    await expect(page.locator('#admin-wish-filter')).toHaveCSS('min-width', '118px');
+    await expect(page.locator('#admin-wish-filter')).toHaveCSS('max-width', '150px');
 
     await page.evaluate(() => window.renderAdminCampaigns([{
         id: 'campaign-one',
@@ -265,6 +287,9 @@ test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({pag
 
     await expect(page.locator('#admin-user-query')).toHaveAttribute('placeholder', '輸入 Email、姓名或暱稱');
     await expect(page.locator('.admin-user-row')).toHaveCount(1);
+    await page.locator('.admin-user-row-content').hover();
+    await expect(page.locator('.admin-user-row-content')).toHaveCSS('transform', 'none');
+    await expect(page.locator('.point-user-checkbox')).toBeVisible();
     await expect(page.locator('#open-point-adjustment')).toBeDisabled();
     await expect(page.locator('#batch-points')).toHaveAttribute('min', '-1000');
     await page.locator('.point-user-checkbox').check();

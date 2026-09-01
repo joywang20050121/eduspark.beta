@@ -65,6 +65,7 @@ const callSetQrCampaignStatus = httpsCallable(functions, "setQrCampaignStatus");
 const callListUsers = httpsCallable(functions, "listUsers");
 const callSetAdminRole = httpsCallable(functions, "setAdminRole");
 const callListWishes = httpsCallable(functions, "listWishes");
+const callReplyWish = httpsCallable(functions, "replyWish");
 const callDeleteWish = httpsCallable(functions, "deleteWish");
 const callListAnnouncements = httpsCallable(functions, "listAnnouncements");
 const callSaveAnnouncement = httpsCallable(functions, "saveAnnouncement");
@@ -383,11 +384,11 @@ window.renderAdminCampaigns = (campaigns = []) => {
 
 document.getElementById("save-campaign").addEventListener("click", async (event) => {
     const title = document.getElementById("admin-campaign-title").value.trim();
-    const description = document.getElementById("admin-campaign-description").value.trim();
+    const description = document.getElementById("admin-campaign-description").value;
     const points = Number(document.getElementById("admin-campaign-points").value);
     const startsAt = new Date(document.getElementById("admin-campaign-start").value).getTime();
     const endsAt = new Date(document.getElementById("admin-campaign-end").value).getTime();
-    if (!title || !description || !Number.isInteger(points) || !startsAt || !endsAt) {
+    if (!title || !description.trim() || !Number.isInteger(points) || !startsAt || !endsAt) {
         showToast("請完整填寫活動名稱、內文、點數與時間");
         return;
     }
@@ -416,15 +417,13 @@ document.getElementById("open-campaign-form").addEventListener("click", () => {
 });
 
 document.getElementById("download-qr").addEventListener("click", () => {
-    if (!currentQrDownload?.svg) return;
-    const objectUrl = URL.createObjectURL(new Blob([currentQrDownload.svg], {type: "image/svg+xml;charset=utf-8"}));
+    if (!currentQrDownload?.pngDataUrl) return;
     const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${currentQrDownload.title || "活動"}-QR-code.svg`;
+    link.href = currentQrDownload.pngDataUrl;
+    link.download = `${currentQrDownload.title || "活動"}-QR-code.png`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(objectUrl);
 });
 
 const setSelectedAdminRole = async (admin) => {
@@ -595,7 +594,18 @@ const renderAdminWishes = () => {
                     <span class="campaign-status">${escapeHtml(wishCategoryLabels[wish.category] || "建議")}${wish.anonymous ? "・匿名" : ""}</span>
                 </div>
                 <p class="admin-wish-message">${escapeHtml(wish.message)}</p>
+                ${wish.adminReply ? `
+                    <div class="admin-wish-existing-reply">
+                        <strong>管理員回覆</strong>
+                        <p>${escapeHtml(wish.adminReply)}</p>
+                        ${wish.repliedAt ? `<time>${escapeHtml(formatWishTime(wish.repliedAt))}</time>` : ""}
+                    </div>` : ""}
+                <div class="admin-wish-reply-form">
+                    <label for="wish-reply-${escapeHtml(wish.id)}">${wish.adminReply ? "更新回覆" : "回覆留言"}</label>
+                    <textarea id="wish-reply-${escapeHtml(wish.id)}" class="wish-reply-input" maxlength="1000" rows="3" placeholder="輸入要顯示在前台的回覆">${escapeHtml(wish.adminReply || "")}</textarea>
+                </div>
                 <div class="campaign-actions">
+                    <button type="button" class="small-action-btn save-wish-reply">${wish.adminReply ? "更新回覆" : "送出回覆"}</button>
                     <button type="button" class="small-action-btn delete-wish">刪除留言</button>
                 </div>
             </article>
@@ -757,6 +767,29 @@ document.getElementById("admin-announcement-list").addEventListener("click", asy
 });
 
 document.getElementById("admin-wish-list").addEventListener("click", async (event) => {
+    const replyButton = event.target.closest(".save-wish-reply");
+    if (replyButton) {
+        const item = replyButton.closest("[data-wish-id]");
+        const input = item?.querySelector(".wish-reply-input");
+        const reply = input?.value.trim();
+        if (!item || !reply) {
+            showToast("請輸入回覆內容");
+            return;
+        }
+        replyButton.disabled = true;
+        try {
+            const result = (await callReplyWish({wishId: item.dataset.wishId, reply})).data;
+            adminWishes = adminWishes.map((wish) => wish.id === item.dataset.wishId
+                ? {...wish, adminReply: result.adminReply, repliedAt: result.repliedAt}
+                : wish);
+            renderAdminWishes();
+            showToast("回覆已送出");
+        } catch (error) {
+            showToast(callableErrorMessage(error, "回覆送出失敗"));
+            replyButton.disabled = false;
+        }
+        return;
+    }
     const button = event.target.closest(".delete-wish");
     if (!button) return;
     const item = button.closest("[data-wish-id]");
@@ -794,11 +827,7 @@ document.getElementById("admin-wish-list").addEventListener("click", async (even
     }
 });
 
-document.getElementById("refresh-campaigns").addEventListener("click", loadQrCampaigns);
-document.getElementById("refresh-admins").addEventListener("click", () => loadAdminUsers());
-document.getElementById("refresh-wishes").addEventListener("click", loadAdminWishes);
 document.getElementById("admin-wish-filter").addEventListener("change", renderAdminWishes);
-document.getElementById("refresh-announcements").addEventListener("click", loadAnnouncements);
 document.querySelectorAll("[data-admin-route]").forEach((link) => {
     link.addEventListener("click", (event) => {
         event.preventDefault();

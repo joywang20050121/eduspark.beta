@@ -6,8 +6,8 @@
     <meta name="firebase-app-check-site-key" content="">
     <title>教院小火花｜管理後台</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=12">
-    <link rel="stylesheet" href="/admin/admin.css?v=6">
+    <link rel="stylesheet" href="/style.css?v=13">
+    <link rel="stylesheet" href="/admin/admin.css?v=7">
 </head>
 <body class="admin-page">
     <div id="toast" role="status" aria-live="polite">提示訊息</div>
@@ -72,7 +72,6 @@
                     <h2>活動 QR code</h2>
                 </div>
                 <div class="admin-header-actions">
-                    <button id="refresh-campaigns" class="small-action-btn">重新整理</button>
                     <button id="open-campaign-form" class="admin-primary-button">新增</button>
                 </div>
             </div>
@@ -126,7 +125,7 @@
                 <div class="admin-modal-body">
                     <div id="qr-preview-image" class="qr-preview-image"></div>
                     <a id="qr-preview-url" class="qr-preview-url" target="_blank" rel="noopener noreferrer"></a>
-                    <button id="download-qr" class="admin-primary-button">下載 SVG</button>
+                    <button id="download-qr" class="admin-primary-button">下載 PNG</button>
                 </div>
             </section>
         </div>
@@ -138,7 +137,6 @@
                     <h2>使用者列表</h2>
                 </div>
                 <div class="admin-header-actions">
-                    <button id="refresh-admins" class="small-action-btn">重新整理</button>
                     <button id="open-point-adjustment" class="admin-primary-button" disabled>調整積分</button>
                 </div>
             </div>
@@ -193,7 +191,6 @@
                     <p class="admin-kicker">WISHING POOL</p>
                     <h2>許願池</h2>
                 </div>
-                <button id="refresh-wishes" class="small-action-btn">重新整理</button>
             </div>
             <div class="admin-card">
                 <div class="admin-inline-heading"><h3>使用者留言</h3><select id="admin-wish-filter"><option value="all">全部標籤</option><option value="suggestion">建議</option><option value="feedback">回饋</option><option value="curiosity">好奇</option></select></div>
@@ -209,7 +206,6 @@
                     <h2>公佈欄</h2>
                 </div>
                 <div class="admin-header-actions">
-                    <button id="refresh-announcements" class="small-action-btn">重新整理</button>
                     <button id="open-announcement-form" class="admin-primary-button">新增</button>
                 </div>
             </div>
@@ -265,6 +261,6 @@
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=9"></script>
+    <script type="module" src="/admin/admin.js?v=10"></script>
 </body>
 </html>

@@ -42,6 +42,7 @@ type TestClient = {
   bootstrapSuperAdmin: ReturnType<typeof httpsCallable>;
   createWish: ReturnType<typeof httpsCallable>;
   listWishes: ReturnType<typeof httpsCallable>;
+  replyWish: ReturnType<typeof httpsCallable>;
   deleteWish: ReturnType<typeof httpsCallable>;
   listPublishedAnnouncements: ReturnType<typeof httpsCallable>;
   listAnnouncements: ReturnType<typeof httpsCallable>;
@@ -91,6 +92,7 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     bootstrapSuperAdmin: httpsCallable(functions, "bootstrapSuperAdmin"),
     createWish: httpsCallable(functions, "createWish"),
     listWishes: httpsCallable(functions, "listWishes"),
+    replyWish: httpsCallable(functions, "replyWish"),
     deleteWish: httpsCallable(functions, "deleteWish"),
     listPublishedAnnouncements: httpsCallable(functions, "listPublishedAnnouncements"),
     listAnnouncements: httpsCallable(functions, "listAnnouncements"),
@@ -183,7 +185,7 @@ describe("獎勵兌換交易", () => {
 });
 
 describe("許願池", () => {
-  test("使用者可以公開或匿名留言，管理員可以刪除", async () => {
+  test("使用者可以公開或匿名留言，管理員可以回覆與刪除", async () => {
     const named = await createClient("wish-named");
     const anonymous = await createClient("wish-anonymous");
     const admin = await createClient("wish-admin", true);
@@ -203,6 +205,24 @@ describe("許願池", () => {
     assert.equal(hiddenAuthor?.anonymous, true);
     assert.equal(hiddenAuthor?.authorName, "匿名");
     assert.equal(hiddenAuthor?.category, "curiosity");
+
+    await assert.rejects(() => named.replyWish({
+      wishId: (namedWish.data as {id: string}).id,
+      reply: "一般使用者不能回覆",
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
+    const reply = await admin.replyWish({
+      wishId: (namedWish.data as {id: string}).id,
+      reply: "謝謝你的建議，我們會安排看看！",
+    });
+    assert.equal((reply.data as {adminReply: string}).adminReply, "謝謝你的建議，我們會安排看看！");
+    const repliedWishes = (await named.listWishes()).data as Array<{
+      id: string;
+      adminReply: string;
+      repliedAt: number | null;
+    }>;
+    const repliedWish = repliedWishes.find((wish) => wish.id === (namedWish.data as {id: string}).id);
+    assert.equal(repliedWish?.adminReply, "謝謝你的建議，我們會安排看看！");
+    assert.equal(typeof repliedWish?.repliedAt, "number");
 
     await assert.rejects(() => named.deleteWish({
       wishId: (anonymousWish.data as {id: string}).id,
@@ -271,17 +291,25 @@ describe("管理員 QR code 管理", () => {
     const client = await createClient("erin", true);
     const created = await client.createQrCampaign({
       title: "管理員整合測試",
-      description: "活動詳細說明",
+      description: "第一段活動說明\n\n  保留縮排的第二段",
       points: 8,
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
     });
-    const campaign = created.data as {id: string; url: string; svg: string; active: boolean; description: string};
+    const campaign = created.data as {
+      id: string;
+      url: string;
+      svg: string;
+      pngDataUrl: string;
+      active: boolean;
+      description: string;
+    };
     assert.match(campaign.id, /^[a-f0-9]{36}$/);
     assert.match(campaign.url, new RegExp(`redeem=${campaign.id}`));
     assert.match(campaign.svg, /<svg/);
+    assert.match(campaign.pngDataUrl, /^data:image\/png;base64,/);
     assert.equal(campaign.active, true);
-    assert.equal(campaign.description, "活動詳細說明");
+    assert.equal(campaign.description, "第一段活動說明\n\n  保留縮排的第二段");
 
     const updated = await client.updateQrCampaign({
       campaignId: campaign.id,

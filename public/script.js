@@ -475,7 +475,7 @@ onAuthStateChanged(auth, async (user) => {
         }
     } catch (err) {
         console.error("初始化錯誤:", err);
-        if (window.showToast) window.showToast("資料讀取失敗，請重新整理");
+        if (window.showToast) window.showToast("資料讀取失敗，請稍後再試");
         activateView('view-login');
     } finally {
         // 無論結果如何，500ms 後關閉載入畫面，避免卡死
@@ -698,6 +698,11 @@ window.loadWishes = async () => {
                     <time>${escapeHtml(formatWishTime(wish.createdAt))}</time>
                 </div>
                 <p>${escapeHtml(wish.message)}</p>
+                ${wish.adminReply ? `
+                    <div class="wish-admin-reply">
+                        <strong>小火花管理員回覆</strong>
+                        <p>${escapeHtml(wish.adminReply)}</p>
+                    </div>` : ''}
             </article>
         `).join('') : '<p class="empty-history">目前還沒有留言，成為第一個留下想法的人吧！</p>';
     } catch (error) {
@@ -757,11 +762,13 @@ window.loadActivities = async () => {
 
 window.openActivityDetail = (campaign) => {
     document.getElementById('activity-detail-content').innerHTML = `
-        <p class="wish-eyebrow">活動詳情</p>
-        <h2>${escapeHtml(campaign.title)}</h2>
-        <p class="activity-detail-time">${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</p>
-        <p>${escapeHtml(campaign.description || '尚無活動說明')}</p>
-        <p class="activity-card-points">完成可獲得 ${Number(campaign.points)} 點</p>`;
+        <header class="activity-detail-header">
+            <p class="wish-eyebrow">活動詳情</p>
+            <h2>${escapeHtml(campaign.title)}</h2>
+            <p class="activity-detail-time">${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</p>
+        </header>
+        <div class="activity-detail-description">${escapeHtml(campaign.description || '尚無活動說明')}</div>
+        <p class="activity-card-points activity-detail-points">完成可獲得 ${Number(campaign.points)} 點</p>`;
     document.getElementById('activity-detail').classList.add('active');
     document.getElementById('activity-detail-overlay').classList.add('active');
 };
@@ -1314,7 +1321,7 @@ window.startQrCamera = async () => {
         return;
     }
     if (typeof window.jsQR !== 'function') {
-        setScannerStatus('QR code 掃描元件載入失敗，請重新整理後再試。');
+        setScannerStatus('QR code 掃描元件載入失敗，請重新開啟頁面後再試。');
         setScannerRestartVisible(true);
         return;
     }
@@ -1428,16 +1435,13 @@ const showQrPreview = (campaign) => {
 };
 
 window.downloadCurrentQr = () => {
-    if (!currentQrDownload?.svg) return;
-    const blob = new Blob([currentQrDownload.svg], {type: 'image/svg+xml;charset=utf-8'});
+    if (!currentQrDownload?.pngDataUrl) return;
     const link = document.createElement('a');
-    const objectUrl = URL.createObjectURL(blob);
-    link.href = objectUrl;
-    link.download = `${currentQrDownload.title || '活動'}-QR-code.svg`;
+    link.href = currentQrDownload.pngDataUrl;
+    link.download = `${currentQrDownload.title || '活動'}-QR-code.png`;
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(objectUrl);
 };
 
 window.openAdminView = () => {

@@ -11,6 +11,16 @@ export function requiredText(value: unknown, field: string, maxLength: number): 
   return result;
 }
 
+export function requiredPreservedText(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpsError("invalid-argument", `${field}不可空白`);
+  }
+  if (value.length > maxLength) {
+    throw new HttpsError("invalid-argument", `${field}超過字數限制`);
+  }
+  return value;
+}
+
 export function optionalText(value: unknown, field: string, maxLength: number): string {
   if (value == null || value === "") return "";
   if (typeof value !== "string") {

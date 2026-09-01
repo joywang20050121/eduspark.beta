@@ -151,7 +151,7 @@ window.generateAvatarSvg = (letter = '火', bgColor = '#C66E52') => {
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
             <rect width="120" height="120" rx="60" fill="${safeColor}" />
-            <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Noto Serif TC, serif" fill="white" font-weight="700">${safeLetter}</text>
+            <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="58" font-family="Inter, sans-serif" fill="white" font-weight="700">${safeLetter}</text>
         </svg>`;
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 };

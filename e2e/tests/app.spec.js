@@ -32,6 +32,22 @@ test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
     await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 4（已達最高等級）');
 });
 
+test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page}) => {
+    await page.setViewportSize({width: 393, height: 659});
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.evaluate(() => window.renderSparkLevel(18));
+
+    const stage = page.locator('.spark-character-stage');
+    const stageBox = await stage.boundingBox();
+    expect(stageBox.width).toBeLessThanOrEqual(294);
+    expect(stageBox.height).toBeCloseTo(244, 1);
+    await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
+    await expect(page.locator('#spark-level-image')).toHaveCSS('transform', 'none');
+    await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
+    await expect(page.locator('.home-scan-button')).toHaveCSS('font-size', '17px');
+});
+
 test('沒有公告時顯示敬請期待', async ({page}) => {
     await page.route('**/listPublishedAnnouncements', async route => {
         await route.fulfill({

@@ -378,11 +378,46 @@ button:active { transform: scale(0.97) !important; }
     font-weight: 700;
 }
 
+@media (max-width: 414px) {
+    .home-view { padding: 18px 20px 96px; }
+    .home-header { gap: 10px; margin-bottom: 13px; }
+    .home-title { gap: 8px; }
+    .home-title-avatar { width: 44px; height: 44px; }
+    .home-title-text { gap: 2px; }
+    .home-title-text h1 { font-size: 21px; letter-spacing: 1.5px; }
+    .home-title-text p { font-size: 11px; letter-spacing: .7px; }
+    .home-account-actions { gap: 5px; }
+    .home-logo { width: 42px; height: 42px; }
+    .home-points-button { width: 36px; height: 43px; }
+    .home-points-button svg { inset: 2px 3px; width: 30px; height: 39px; }
+    .home-points-button span { margin-top: 8px; font-size: 14px; }
+
+    .spark-character-stage { width: min(100%, 294px); height: 278px; border-radius: 26px; }
+    .spark-level-image { object-fit: contain; transform: none; }
+    .spark-level-kicker { margin-top: 15px; font-size: 12px; }
+    .spark-level-name { margin-top: 3px; font-size: 25px; letter-spacing: .08em; }
+    .spark-level-progress { width: min(100%, 250px); height: 15px; margin-top: 13px; border-width: 3px; }
+    .spark-level-progress-label { margin-top: 7px; font-size: 16px; }
+
+    .home-primary-actions { gap: 10px; margin-top: 20px; }
+    .main-btn.home-scan-button { gap: 10px; padding: 14px 0; font-size: 17px; }
+    .home-scan-button svg { width: 23px; height: 23px; }
+    .home-map-button { padding: 12px 14px; border-width: 3px; font-size: 16px; letter-spacing: .07em; }
+    .home-wish-button { top: 126px; width: 60px; min-height: 70px; padding: 9px 7px 8px; border-radius: 24px 0 0 24px; }
+    .home-wish-button svg { width: 30px; height: 30px; }
+    .home-wish-button span { font-size: 10px; }
+}
+
 @media (max-height: 760px) {
     .spark-character-stage { height: 244px; }
     .spark-level-kicker { margin-top: 13px; }
     .spark-level-name { font-size: 26px; }
     .home-primary-actions { margin-top: 20px; }
+}
+
+@media (max-width: 414px) and (max-height: 760px) {
+    .spark-level-name { font-size: 24px; }
+    .home-primary-actions { margin-top: 17px; }
 }
 
 /* 積分火苗 */

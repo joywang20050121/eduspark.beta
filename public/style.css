@@ -1463,6 +1463,7 @@ button:active { transform: scale(0.97) !important; }
 .announcement-rich-content div { margin: 0; }
 .announcement-rich-content ul, .announcement-rich-content ol { padding-left: 1.5em; }
 .announcement-rich-content a { color: var(--color-red); }
+.announcement-rich-content img { display: block; max-width: 100%; height: auto; margin: 12px auto; border-radius: 12px; }
 
 .wish-input-row {
     display: flex;

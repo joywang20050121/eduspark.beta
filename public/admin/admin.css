@@ -329,6 +329,8 @@
 .admin-rich-preview p { margin: 0 0 .8em; }
 .admin-rich-preview div { margin: 0; }
 .admin-rich-preview ul, .admin-rich-preview ol { padding-left: 1.4em; }
+.wysiwyg-editor img,
+.admin-rich-preview img { display: block; max-width: 100%; height: auto; margin: 12px auto; border-radius: 12px; }
 
 .admin-card select {
     width: 100%;

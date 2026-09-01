@@ -727,6 +727,26 @@ document.querySelectorAll(".wysiwyg-toolbar [data-command]").forEach((button) =>
             }
             return;
         }
+        if (command === "insertImage") {
+            const url = window.prompt("請輸入圖片網址（僅支援 https://）");
+            if (!url) return;
+            try {
+                const parsed = new URL(url);
+                if (parsed.protocol !== "https:") throw new Error("invalid");
+                const alt = window.prompt("請輸入圖片替代文字（可留白）") ?? "";
+                document.execCommand(command, false, parsed.toString());
+                const insertedImage = [...editor.querySelectorAll("img")]
+                    .reverse()
+                    .find((image) => image.src === parsed.toString());
+                if (insertedImage) {
+                    insertedImage.alt = alt.trim().slice(0, 200);
+                    insertedImage.loading = "lazy";
+                }
+            } catch {
+                showToast("請輸入有效的 https 圖片網址");
+            }
+            return;
+        }
         document.execCommand(command, false);
     });
 });

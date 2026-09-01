@@ -81,7 +81,7 @@ test('公告保留換行並可依類型篩選', async ({page}) => {
             body: JSON.stringify({result: [{
                 id: 'announcement-event',
                 title: '活動公告',
-                contentHtml: '<div>第一行</div><div>第二行</div>',
+                contentHtml: '<div>第一行</div><div>第二行</div><img src="https://example.com/event.png" alt="活動照片" loading="lazy">',
                 category: 'event',
                 updatedAt: Date.now()
             }, {
@@ -103,6 +103,9 @@ test('公告保留換行並可依類型篩選', async ({page}) => {
     await expect(lines).toHaveCount(2);
     const [firstLine, secondLine] = await Promise.all([lines.nth(0).boundingBox(), lines.nth(1).boundingBox()]);
     expect(secondLine.y).toBeGreaterThan(firstLine.y);
+    const announcementImage = eventCard.getByRole('img', {name: '活動照片'});
+    await expect(announcementImage).toHaveAttribute('loading', 'lazy');
+    await expect(announcementImage).toHaveCSS('max-width', '100%');
     await page.locator('#announcement-filter').selectOption('event');
     await expect(page.getByRole('heading', {name: '活動公告'})).toBeVisible();
     await expect(page.getByRole('heading', {name: '功能公告'})).toBeHidden();
@@ -291,7 +294,15 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
 
     await expect(page.locator('#admin-announcement-list')).toBeVisible();
     await page.locator('#open-announcement-form').click();
-    await expect(page.getByRole('dialog', {name: '新增公告'})).toBeVisible();
+    const announcementDialog = page.getByRole('dialog', {name: '新增公告'});
+    await expect(announcementDialog).toBeVisible();
+    const promptAnswers = ['https://example.com/announcement.png', '活動照片'];
+    page.on('dialog', async dialog => dialog.accept(promptAnswers.shift() || ''));
+    await announcementDialog.getByRole('button', {name: '圖片', exact: true}).click();
+    const editorImage = announcementDialog.locator('#announcement-content img');
+    await expect(editorImage).toHaveAttribute('src', 'https://example.com/announcement.png');
+    await expect(editorImage).toHaveAttribute('alt', '活動照片');
+    await expect(editorImage).toHaveAttribute('loading', 'lazy');
 });
 
 test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({page}) => {

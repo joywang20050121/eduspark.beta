@@ -248,15 +248,20 @@ describe("公佈欄", () => {
 
     const created = await admin.saveAnnouncement({
       title: "測試公告",
-      contentHtml: '<div><strong>公開公告</strong></div><div>第二行<script>alert("x")</script></div>',
+      contentHtml: '<div><strong>公開公告</strong></div><div>第二行<script>alert("x")</script></div>' +
+        '<img src="https://example.com/event.png" alt="活動照片" onerror="alert(1)">',
       category: "event",
       published: true,
     });
     const id = (created.data as {id: string}).id;
     const published = (await user.listPublishedAnnouncements()).data as Array<{id: string; contentHtml: string}>;
     assert.ok(published.some((announcement) => announcement.id === id));
-    assert.equal(published.find((announcement) => announcement.id === id)?.contentHtml,
-      "<div><strong>公開公告</strong></div><div>第二行</div>");
+    const publishedHtml = published.find((announcement) => announcement.id === id)?.contentHtml ?? "";
+    assert.match(publishedHtml, /^<div><strong>公開公告<\/strong><\/div><div>第二行<\/div>/);
+    assert.match(publishedHtml, /<img[^>]+src="https:\/\/example\.com\/event\.png"/);
+    assert.match(publishedHtml, /alt="活動照片"/);
+    assert.match(publishedHtml, /loading="lazy"/);
+    assert.doesNotMatch(publishedHtml, /script|onerror/);
 
     await admin.saveAnnouncement({
       id,

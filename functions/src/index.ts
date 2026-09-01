@@ -116,17 +116,30 @@ function adminUserSummary(user: UserRecord) {
 function sanitizeAnnouncementHtml(value: unknown): string {
   const html = requiredText(value, "公告內容", 10000);
   const sanitized = sanitizeHtml(html, {
-    allowedTags: ["p", "div", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a"],
-    allowedAttributes: {a: ["href", "target", "rel"]},
+    allowedTags: ["p", "div", "br", "strong", "b", "em", "i", "u", "ul", "ol", "li", "a", "img"],
+    allowedAttributes: {
+      a: ["href", "target", "rel"],
+      img: ["src", "alt", "loading"],
+    },
     allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: {img: ["https"]},
     transformTags: {
       a: (_tagName, attribs) => ({
         tagName: "a",
         attribs: {...attribs, target: "_blank", rel: "noopener noreferrer"},
       }),
+      img: (_tagName, attribs) => ({
+        tagName: "img",
+        attribs: {
+          src: attribs.src ?? "",
+          alt: attribs.alt ?? "",
+          loading: "lazy",
+        },
+      }),
     },
   }).trim();
-  if (!sanitizeHtml(sanitized, {allowedTags: [], allowedAttributes: {}}).trim()) {
+  const textContent = sanitizeHtml(sanitized, {allowedTags: [], allowedAttributes: {}}).trim();
+  if (!textContent && !/<img\b/i.test(sanitized)) {
     throw new HttpsError("invalid-argument", "公告內容不能為空白");
   }
   return sanitized;

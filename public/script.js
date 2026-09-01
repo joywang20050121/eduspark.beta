@@ -84,6 +84,47 @@ window.isAdmin = false;
 window.isSuperAdmin = false;
 window.leaderboardMode = 'current';
 
+const sparkLevels = [
+    {level: 1, minimum: 0, name: '初生火苗', image: 'assets/levels/lv1.png'},
+    {level: 2, minimum: 10, name: '探索火花', image: 'assets/levels/lv2.png'},
+    {level: 3, minimum: 20, name: '熱情火焰', image: 'assets/levels/lv3.png'},
+    {level: 4, minimum: 30, name: '幻藍大火焰', image: 'assets/levels/lv4.png'}
+];
+
+window.getSparkLevel = (totalPoints = 0) => {
+    const total = Math.max(0, Math.floor(Number(totalPoints) || 0));
+    const index = Math.min(Math.floor(total / 10), sparkLevels.length - 1);
+    const level = sparkLevels[index];
+    const progress = index === sparkLevels.length - 1 ? 10 : total - level.minimum;
+    return {...level, totalPoints: total, progress};
+};
+
+window.renderSparkLevel = (totalPoints = 0) => {
+    const level = window.getSparkLevel(totalPoints);
+    const image = document.getElementById('spark-level-image');
+    const kicker = document.getElementById('spark-level-kicker');
+    const name = document.getElementById('spark-level-name');
+    const progress = document.getElementById('spark-level-progress');
+    const fill = document.getElementById('spark-level-progress-fill');
+    const label = document.getElementById('spark-level-progress-label');
+    if (image) {
+        image.src = level.image;
+        image.alt = level.name;
+    }
+    if (kicker) kicker.textContent = `LV${level.level}`;
+    if (name) name.textContent = level.name;
+    if (progress) {
+        progress.setAttribute('aria-valuenow', String(level.progress));
+        progress.setAttribute('aria-valuetext', level.level === 4 ? '已達最高等級' : `${level.progress}/10`);
+    }
+    if (fill) fill.style.width = `${level.progress * 10}%`;
+    if (label) {
+        label.textContent = level.level === 4
+            ? 'LV. 4（已達最高等級）'
+            : `LV. ${level.level}（${level.progress}/10）`;
+    }
+};
+
 const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -608,6 +649,7 @@ window.loginAsGuest = async () => {
     const guestData = localStorage.getItem('guest_user_data');
     if (guestData) {
         userData = JSON.parse(guestData);
+        userData.totalPoints = Math.max(Number(userData.points || 0), Number(userData.totalPoints || 0));
         redemptionHistory = JSON.parse(localStorage.getItem('guest_redemption_history') || '[]');
     } else {
         userData = {
@@ -616,6 +658,7 @@ window.loginAsGuest = async () => {
             dept: '訪客模式',
             bio: '這是訪客測試帳號，資料只保存在這台裝置。',
             points: 0,
+            totalPoints: 0,
             history: [],
             avatar: window.generateAvatarSvg('訪', '#8D63A6')
         };
@@ -954,6 +997,7 @@ window.earnPoints = async (btnElement, pointsToAdd, taskName) => {
     }
 
     userData.points += pointsToAdd;
+    userData.totalPoints = Math.max(Number(userData.totalPoints || 0), userData.points - pointsToAdd) + pointsToAdd;
     localStorage.setItem('guest_user_data', JSON.stringify(userData));
 
     if (!btnElement.dataset.originalText) {
@@ -1657,7 +1701,9 @@ window.switchView = (viewId) => {
 // ========== UI 更新 ==========
 window.updatePointsUI = () => {
     const pts = userData ? userData.points : 0;
+    const totalPoints = userData ? Math.max(Number(userData.totalPoints || 0), Number(pts || 0)) : 0;
     document.querySelectorAll('.global-points').forEach(el => el.innerText = pts);
+    window.renderSparkLevel(totalPoints);
     const resetScoreButton = document.getElementById('reset-score-btn');
     const clearHistoryButton = document.getElementById('clear-history-btn');
     if (resetScoreButton) resetScoreButton.style.display = window.isGuestMode ? 'inline-flex' : 'none';

@@ -14,6 +14,22 @@ test('訪客可以進入首頁', async ({page}) => {
     await expect(page.locator('#view-home')).toHaveClass(/active/);
     await expect(page.locator('#main-nav')).toBeVisible();
     await expect(page.getByRole('button', {name: '掃描累積點數'})).toBeVisible();
+    await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toBeVisible();
+});
+
+test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.evaluate(() => window.renderSparkLevel(18));
+
+    await expect(page.getByRole('heading', {name: '探索火花'})).toBeVisible();
+    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv2.png');
+    await expect(page.locator('#spark-level-progress')).toHaveAttribute('aria-valuenow', '8');
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 2（8/10）');
+
+    await page.evaluate(() => window.renderSparkLevel(30));
+    await expect(page.getByRole('heading', {name: '幻藍大火焰'})).toBeVisible();
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 4（已達最高等級）');
 });
 
 test('沒有公告時顯示敬請期待', async ({page}) => {
@@ -169,6 +185,24 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
 });
 
 test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({page}) => {
+    await page.route('**/getQrCampaign', async route => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({result: {
+                id: 'campaign-one',
+                title: '迎新交流會',
+                description: '活動說明',
+                points: 5,
+                active: true,
+                hasRedemptions: true,
+                startsAt: Date.now() - 60_000,
+                endsAt: Date.now() + 60_000,
+                svg: '<svg></svg>',
+                url: 'https://example.com'
+            }})
+        });
+    });
     await page.goto('/admin/index.html');
     await expect(page.locator('#google-admin-login')).toBeVisible();
     await page.evaluate(() => {
@@ -183,6 +217,22 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     const campaignDialog = page.getByRole('dialog', {name: '新增活動 QR code'});
     await expect(campaignDialog).toBeVisible();
     await campaignDialog.getByRole('button', {name: '關閉', exact: true}).click();
+
+    await page.evaluate(() => window.renderAdminCampaigns([{
+        id: 'campaign-one',
+        title: '迎新交流會',
+        description: '活動說明',
+        points: 5,
+        active: true,
+        startsAt: Date.now() - 60_000,
+        endsAt: Date.now() + 60_000
+    }]));
+    await page.getByRole('button', {name: '編輯'}).click();
+    const editDialog = page.getByRole('dialog', {name: '編輯活動'});
+    await expect(editDialog).toBeVisible();
+    await expect(editDialog.locator('#admin-campaign-points')).toBeDisabled();
+    await expect(editDialog).toContainText('已有使用者兌換，活動點數不能修改。');
+    await editDialog.getByRole('button', {name: '關閉', exact: true}).click();
 
     await expect(page.locator('#admin-announcement-list')).toBeVisible();
     await page.locator('#open-announcement-form').click();

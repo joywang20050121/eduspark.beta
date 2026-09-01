@@ -58,6 +58,7 @@ if (appCheckSiteKey) {
 const callGetMyProfile = httpsCallable(functions, "getMyProfile");
 const callBootstrapSuperAdmin = httpsCallable(functions, "bootstrapSuperAdmin");
 const callCreateQrCampaign = httpsCallable(functions, "createQrCampaign");
+const callUpdateQrCampaign = httpsCallable(functions, "updateQrCampaign");
 const callListQrCampaigns = httpsCallable(functions, "listQrCampaigns");
 const callGetQrCampaign = httpsCallable(functions, "getQrCampaign");
 const callSetQrCampaignStatus = httpsCallable(functions, "setQrCampaignStatus");
@@ -74,6 +75,7 @@ const loading = document.getElementById("admin-loading");
 const login = document.getElementById("admin-login");
 const dashboard = document.getElementById("admin-dashboard");
 let currentQrDownload = null;
+let editingCampaignId = null;
 let selectedAdminUser = null;
 let authorizationInProgress = false;
 let adminUsers = [];
@@ -168,6 +170,39 @@ const initializeCampaignTimes = () => {
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
     document.getElementById("admin-campaign-start").value ||= toLocalDateTimeInput(start);
     document.getElementById("admin-campaign-end").value ||= toLocalDateTimeInput(end);
+};
+
+const resetCampaignForm = () => {
+    editingCampaignId = null;
+    document.getElementById("campaign-form-title").textContent = "新增活動 QR code";
+    document.getElementById("save-campaign").textContent = "建立 QR code";
+    document.getElementById("admin-campaign-title").value = "";
+    document.getElementById("admin-campaign-description").value = "";
+    document.getElementById("admin-campaign-points").value = "2";
+    document.getElementById("admin-campaign-points").disabled = false;
+    document.getElementById("campaign-points-lock-note").hidden = true;
+    document.getElementById("admin-campaign-start").value = "";
+    document.getElementById("admin-campaign-end").value = "";
+    initializeCampaignTimes();
+};
+
+const openCampaignEditor = async (campaignId) => {
+    try {
+        const campaign = (await callGetQrCampaign({campaignId})).data;
+        editingCampaignId = campaign.id;
+        document.getElementById("campaign-form-title").textContent = "編輯活動";
+        document.getElementById("save-campaign").textContent = "儲存修改";
+        document.getElementById("admin-campaign-title").value = campaign.title || "";
+        document.getElementById("admin-campaign-description").value = campaign.description || "";
+        document.getElementById("admin-campaign-points").value = String(campaign.points || 1);
+        document.getElementById("admin-campaign-points").disabled = campaign.hasRedemptions === true;
+        document.getElementById("campaign-points-lock-note").hidden = campaign.hasRedemptions !== true;
+        document.getElementById("admin-campaign-start").value = toLocalDateTimeInput(new Date(campaign.startsAt));
+        document.getElementById("admin-campaign-end").value = toLocalDateTimeInput(new Date(campaign.endsAt));
+        openAdminModal("campaign-form-modal");
+    } catch (error) {
+        showToast(callableErrorMessage(error, "無法載入活動資料"));
+    }
 };
 
 const adminRoutes = {
@@ -284,11 +319,19 @@ const loadQrCampaigns = async () => {
     try {
         const response = await callListQrCampaigns();
         const campaigns = Array.isArray(response.data) ? response.data : [];
-        if (!campaigns.length) {
-            list.innerHTML = '<p class="empty-history">尚未建立活動 QR code。</p>';
-            return;
-        }
-        list.innerHTML = campaigns.map((campaign) => `
+        window.renderAdminCampaigns(campaigns);
+    } catch (error) {
+        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "活動列表載入失敗"))}</p>`;
+    }
+};
+
+window.renderAdminCampaigns = (campaigns = []) => {
+    const list = document.getElementById("admin-campaign-list");
+    if (!campaigns.length) {
+        list.innerHTML = '<p class="empty-history">尚未建立活動 QR code。</p>';
+        return;
+    }
+    list.innerHTML = campaigns.map((campaign) => `
             <div class="campaign-item" data-campaign-id="${escapeHtml(campaign.id)}">
                 <div class="campaign-item-heading">
                     <div class="campaign-title">${escapeHtml(campaign.title)}</div>
@@ -300,12 +343,13 @@ const loadQrCampaigns = async () => {
                 </div>
                 <p class="admin-wish-message">${escapeHtml(campaign.description || "尚無活動內文")}</p>
                 <div class="campaign-actions">
+                    <button class="small-action-btn edit-campaign">編輯</button>
                     <button class="small-action-btn show-campaign-qr">查看 QR code</button>
                     <button class="small-action-btn toggle-campaign" data-active="${String(!campaign.active)}">${campaign.active ? "停用" : "重新啟用"}</button>
                 </div>
             </div>
-        `).join("");
-        list.querySelectorAll(".show-campaign-qr").forEach((button) => {
+    `).join("");
+    list.querySelectorAll(".show-campaign-qr").forEach((button) => {
             button.addEventListener("click", async () => {
                 const campaignId = button.closest("[data-campaign-id]").dataset.campaignId;
                 try {
@@ -314,28 +358,30 @@ const loadQrCampaigns = async () => {
                     showToast(callableErrorMessage(error, "無法取得 QR code"));
                 }
             });
+    });
+    list.querySelectorAll(".edit-campaign").forEach((button) => {
+        button.addEventListener("click", () => {
+            openCampaignEditor(button.closest("[data-campaign-id]").dataset.campaignId);
         });
-        list.querySelectorAll(".toggle-campaign").forEach((button) => {
-            button.addEventListener("click", async () => {
-                const campaignId = button.closest("[data-campaign-id]").dataset.campaignId;
-                const active = button.dataset.active === "true";
-                button.disabled = true;
-                try {
-                    await callSetQrCampaignStatus({campaignId, active});
-                    showToast(active ? "活動已重新啟用" : "活動已停用");
-                    await loadQrCampaigns();
-                } catch (error) {
-                    showToast(callableErrorMessage(error, "活動狀態更新失敗"));
-                    button.disabled = false;
-                }
-            });
+    });
+    list.querySelectorAll(".toggle-campaign").forEach((button) => {
+        button.addEventListener("click", async () => {
+            const campaignId = button.closest("[data-campaign-id]").dataset.campaignId;
+            const active = button.dataset.active === "true";
+            button.disabled = true;
+            try {
+                await callSetQrCampaignStatus({campaignId, active});
+                showToast(active ? "活動已重新啟用" : "活動已停用");
+                await loadQrCampaigns();
+            } catch (error) {
+                showToast(callableErrorMessage(error, "活動狀態更新失敗"));
+                button.disabled = false;
+            }
         });
-    } catch (error) {
-        list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "活動列表載入失敗"))}</p>`;
-    }
+    });
 };
 
-document.getElementById("create-campaign").addEventListener("click", async (event) => {
+document.getElementById("save-campaign").addEventListener("click", async (event) => {
     const title = document.getElementById("admin-campaign-title").value.trim();
     const description = document.getElementById("admin-campaign-description").value.trim();
     const points = Number(document.getElementById("admin-campaign-points").value);
@@ -348,22 +394,24 @@ document.getElementById("create-campaign").addEventListener("click", async (even
     const button = event.currentTarget;
     button.disabled = true;
     try {
-        const response = await callCreateQrCampaign({title, description, points, startsAt, endsAt});
-        document.getElementById("admin-campaign-title").value = "";
-        document.getElementById("admin-campaign-description").value = "";
+        const response = editingCampaignId
+            ? await callUpdateQrCampaign({campaignId: editingCampaignId, title, description, points, startsAt, endsAt})
+            : await callCreateQrCampaign({title, description, points, startsAt, endsAt});
+        const wasEditing = Boolean(editingCampaignId);
         closeAdminModal("campaign-form-modal");
-        showQrPreview(response.data);
-        showToast("活動 QR code 已建立");
+        if (!wasEditing) showQrPreview(response.data);
+        showToast(wasEditing ? "活動資料已更新" : "活動 QR code 已建立");
+        resetCampaignForm();
         await loadQrCampaigns();
     } catch (error) {
-        showToast(callableErrorMessage(error, "建立 QR code 失敗"));
+        showToast(callableErrorMessage(error, editingCampaignId ? "更新活動失敗" : "建立 QR code 失敗"));
     } finally {
         button.disabled = false;
     }
 });
 
 document.getElementById("open-campaign-form").addEventListener("click", () => {
-    initializeCampaignTimes();
+    resetCampaignForm();
     openAdminModal("campaign-form-modal");
 });
 

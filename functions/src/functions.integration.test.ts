@@ -31,6 +31,7 @@ type TestClient = {
   redeemQr: ReturnType<typeof httpsCallable>;
   redeemReward: ReturnType<typeof httpsCallable>;
   createQrCampaign: ReturnType<typeof httpsCallable>;
+  updateQrCampaign: ReturnType<typeof httpsCallable>;
   listQrCampaigns: ReturnType<typeof httpsCallable>;
   listPublicQrCampaigns: ReturnType<typeof httpsCallable>;
   setQrCampaignStatus: ReturnType<typeof httpsCallable>;
@@ -79,6 +80,7 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     redeemQr: httpsCallable(functions, "redeemQr"),
     redeemReward: httpsCallable(functions, "redeemReward"),
     createQrCampaign: httpsCallable(functions, "createQrCampaign"),
+    updateQrCampaign: httpsCallable(functions, "updateQrCampaign"),
     listQrCampaigns: httpsCallable(functions, "listQrCampaigns"),
     listPublicQrCampaigns: httpsCallable(functions, "listPublicQrCampaigns"),
     setQrCampaignStatus: httpsCallable(functions, "setQrCampaignStatus"),
@@ -265,7 +267,7 @@ describe("管理員 QR code 管理", () => {
     }), (error: {code?: string}) => error.code === "functions/permission-denied");
   });
 
-  test("管理員可以建立、查詢並停用活動", async () => {
+  test("管理員可以建立、編輯、查詢並停用活動", async () => {
     const client = await createClient("erin", true);
     const created = await client.createQrCampaign({
       title: "管理員整合測試",
@@ -281,13 +283,59 @@ describe("管理員 QR code 管理", () => {
     assert.equal(campaign.active, true);
     assert.equal(campaign.description, "活動詳細說明");
 
+    const updated = await client.updateQrCampaign({
+      campaignId: campaign.id,
+      title: "更新後的活動名稱",
+      description: "更新後的活動說明",
+      points: 9,
+      startsAt: Date.now() - 120_000,
+      endsAt: Date.now() + 120_000,
+    });
+    assert.equal((updated.data as {title: string}).title, "更新後的活動名稱");
+
     const listed = await client.listQrCampaigns();
-    assert.ok((listed.data as Array<{id: string}>).some((item) => item.id === campaign.id));
+    const listedCampaign = (listed.data as Array<{id: string; title: string; points: number}>).find((item) => item.id === campaign.id);
+    assert.equal(listedCampaign?.title, "更新後的活動名稱");
+    assert.equal(listedCampaign?.points, 9);
     const publicList = await client.listPublicQrCampaigns();
     assert.ok((publicList.data as Array<{id: string}>).some((item) => item.id === campaign.id));
 
     const disabled = await client.setQrCampaignStatus({campaignId: campaign.id, active: false});
     assert.deepEqual(disabled.data, {id: campaign.id, active: false});
+  });
+
+  test("已有兌換紀錄的活動不能修改點數", async () => {
+    const admin = await createClient("campaign-edit-admin", true);
+    const participant = await createClient("campaign-edit-participant");
+    await participant.saveProfile({realName: "參加者", nickname: "參加者", dept: "教院", bio: "", avatar: ""});
+    const created = await admin.createQrCampaign({
+      title: "已兌換活動",
+      description: "原始說明",
+      points: 4,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    });
+    const campaignId = (created.data as {id: string}).id;
+    await participant.redeemQr({campaignId});
+
+    await assert.rejects(() => admin.updateQrCampaign({
+      campaignId,
+      title: "名稱仍可更新",
+      description: "更新說明",
+      points: 5,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    }), (error: {code?: string}) => error.code === "functions/failed-precondition");
+
+    const updated = await admin.updateQrCampaign({
+      campaignId,
+      title: "名稱仍可更新",
+      description: "更新說明",
+      points: 4,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 120_000,
+    });
+    assert.equal((updated.data as {title: string}).title, "名稱仍可更新");
   });
 });
 

@@ -97,6 +97,7 @@
                     <div class="form-group">
                         <label for="admin-campaign-points">活動點數</label>
                         <input id="admin-campaign-points" type="number" min="1" max="100" value="2">
+                        <p id="campaign-points-lock-note" class="admin-help" hidden>已有使用者兌換，活動點數不能修改。</p>
                     </div>
                     <div class="form-group">
                         <label for="admin-campaign-description">活動內文</label>
@@ -110,7 +111,7 @@
                         <label for="admin-campaign-end">結束時間</label>
                         <input id="admin-campaign-end" type="datetime-local">
                     </div>
-                    <button id="create-campaign" class="admin-primary-button">建立 QR code</button>
+                    <button id="save-campaign" class="admin-primary-button">建立 QR code</button>
                 </div>
             </section>
         </div>
@@ -264,6 +265,6 @@
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=8"></script>
+    <script type="module" src="/admin/admin.js?v=9"></script>
 </body>
 </html>

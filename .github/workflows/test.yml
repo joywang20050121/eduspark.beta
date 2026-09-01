@@ -136,7 +136,7 @@ jobs:
           ./functions/node_modules/.bin/firebase deploy
           --project coespark-a3f6e
           --only
-          functions:createQrCampaign,functions:listQrCampaigns,functions:listPublicQrCampaigns,functions:getQrCampaign,functions:setQrCampaignStatus,functions:lookupAdminUser
+          functions:createQrCampaign,functions:updateQrCampaign,functions:listQrCampaigns,functions:listPublicQrCampaigns,functions:getQrCampaign,functions:setQrCampaignStatus,functions:lookupAdminUser
           --non-interactive
 
       - name: Allow previous revisions to scale down

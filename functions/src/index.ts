@@ -584,6 +584,9 @@ export const redeemQr = onCall(callableOptions, async (request) => {
       label: campaign.title,
       createdAt: FieldValue.serverTimestamp(),
     });
+    transaction.update(campaignRef, {
+      redemptionCount: FieldValue.increment(1),
+    });
     return {points: newPoints, totalPoints: newTotal, earned: pointsToAdd, title: campaign.title};
   });
 
@@ -626,11 +629,60 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
     startsAt: Timestamp.fromMillis(startsAtMillis),
     endsAt: Timestamp.fromMillis(endsAtMillis),
     active: true,
+    redemptionCount: 0,
     createdBy: request.auth.uid,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
   return {id: campaignId, title, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
+});
+
+export const updateQrCampaign = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const campaignId = requiredText(request.data?.campaignId, "活動代碼", 64);
+  const title = requiredText(request.data?.title, "活動名稱", 80);
+  const description = requiredText(request.data?.description, "活動內文", 2000);
+  const points = positiveInteger(request.data?.points, "活動點數", 100);
+  const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
+  const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
+  if (endsAtMillis <= startsAtMillis) {
+    throw new HttpsError("invalid-argument", "結束時間必須晚於開始時間");
+  }
+
+  const campaignRef = db.doc(`qrCampaigns/${campaignId}`);
+  const legacyRedemption = await db.collection("qrRedemptions")
+    .where("campaignId", "==", campaignId)
+    .limit(1)
+    .get();
+  const auditRef = db.collection("adminAuditLogs").doc();
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(campaignRef);
+    if (!snapshot.exists) throw new HttpsError("not-found", "找不到這個活動");
+    const campaign = snapshot.data()!;
+    const hasRedemptions = numberOrZero(campaign.redemptionCount) > 0 || !legacyRedemption.empty;
+    if (numberOrZero(campaign.points) !== points && hasRedemptions) {
+      throw new HttpsError("failed-precondition", "已有使用者兌換此活動，無法修改活動點數");
+    }
+    transaction.update(campaignRef, {
+      title,
+      description,
+      points,
+      startsAt: Timestamp.fromMillis(startsAtMillis),
+      endsAt: Timestamp.fromMillis(endsAtMillis),
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: request.auth.uid,
+    });
+    transaction.create(auditRef, {
+      action: "update_qr_campaign",
+      actorUid: request.auth.uid,
+      actorEmail: request.auth.token.email ?? "",
+      campaignId,
+      title,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return {id: campaignId, title, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis};
 });
 
 export const listQrCampaigns = onCall(callableOptions, async (request) => {
@@ -644,6 +696,7 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
       description: typeof data.description === "string" ? data.description : "",
       points: data.points,
       active: data.active === true,
+      redemptionCount: numberOrZero(data.redemptionCount),
       startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
       endsAt: data.endsAt instanceof Timestamp ? data.endsAt.toMillis() : null,
       url: campaignUrl(item.id),
@@ -683,12 +736,17 @@ export const getQrCampaign = onCall(callableOptions, async (request) => {
   const snapshot = await db.doc(`qrCampaigns/${campaignId}`).get();
   if (!snapshot.exists) throw new HttpsError("not-found", "找不到這個活動");
   const data = snapshot.data()!;
+  const redemptionSnapshot = await db.collection("qrRedemptions")
+    .where("campaignId", "==", campaignId)
+    .limit(1)
+    .get();
   return {
     id: snapshot.id,
     title: data.title,
     description: typeof data.description === "string" ? data.description : "",
     points: data.points,
     active: data.active === true,
+    hasRedemptions: numberOrZero(data.redemptionCount) > 0 || !redemptionSnapshot.empty,
     startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
     endsAt: data.endsAt instanceof Timestamp ? data.endsAt.toMillis() : null,
     ...await campaignQr(snapshot.id),

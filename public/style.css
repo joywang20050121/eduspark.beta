@@ -400,7 +400,7 @@ button:active { transform: scale(0.97) !important; }
     .home-points-button { width: 36px; height: 43px; }
     .home-points-button svg { inset: 2px 3px; width: 30px; height: 39px; }
     .home-points-button > .global-points {
-        margin-top: 12px;
+        margin-top: 17px;
         font-size: 12px;
         line-height: 1;
     }

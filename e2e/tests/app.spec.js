@@ -49,7 +49,7 @@ test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page
     await expect(page.locator('#spark-level-image')).toHaveCSS('animation-name', 'sparkFloat');
     await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('font-size', '12px');
-    await expect(page.locator('.home-points-button span')).toHaveCSS('margin-top', '12px');
+    await expect(page.locator('.home-points-button span')).toHaveCSS('margin-top', '17px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('line-height', '12px');
     await expect(page.locator('.home-scan-button')).toHaveCSS('font-size', '17px');
 });

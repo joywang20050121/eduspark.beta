@@ -44,6 +44,7 @@ test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page
     const stageBox = await stage.boundingBox();
     expect(stageBox.width).toBeLessThanOrEqual(294);
     expect(stageBox.height).toBeCloseTo(244, 1);
+    await expect(stage).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
     await expect(page.locator('#spark-level-image')).toHaveCSS('animation-name', 'sparkFloat');
     await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
@@ -69,6 +70,7 @@ test('沒有公告時顯示敬請期待', async ({page}) => {
     await expect(page.getByRole('heading', {name: '公佈欄'})).toBeVisible();
     await expect(page.getByRole('heading', {name: '敬請期待'})).toBeVisible();
     await expect(page.getByRole('img', {name: '小火花'})).toBeVisible();
+    await expect(page.locator('.announcement-empty')).toHaveCSS('border-radius', '26px 26px 26px 8px');
 });
 
 test('公告保留換行並可依類型篩選', async ({page}) => {
@@ -96,6 +98,7 @@ test('公告保留換行並可依類型篩選', async ({page}) => {
     await page.locator('.nav-item[data-view="view-reward"]').click();
 
     const eventCard = page.locator('.announcement-event');
+    await expect(eventCard).toHaveCSS('border-radius', '26px 26px 26px 8px');
     const lines = eventCard.locator('.announcement-rich-content > div');
     await expect(lines).toHaveCount(2);
     const [firstLine, secondLine] = await Promise.all([lines.nth(0).boundingBox(), lines.nth(1).boundingBox()]);
@@ -129,7 +132,7 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
     await expect(page.locator('#wish-list')).toContainText('希望多一些交流活動');
     await expect(page.locator('#wish-list')).toContainText('謝謝你的建議，我們會安排看看！');
     await expect(page.locator('.wish-admin-reply')).toContainText('小火花管理員回覆');
-    await expect(page.locator('.wish-message-card')).toHaveCSS('border-radius', '20px');
+    await expect(page.locator('.wish-message-card')).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(page.locator('.wish-message-card')).toHaveCSS('overflow', 'hidden');
     await expect(page.locator('#wish-form')).toBeHidden();
     await expect(page.locator('#wish-guest-note')).toBeVisible();
@@ -162,6 +165,7 @@ test('點擊排行榜頭像會顯示使用者資訊', async ({page}) => {
     await expect(detail).toContainText('教育心理與諮商學系三年級');
     await expect(detail.locator('.detail-info-block .detail-text')).toHaveText(`自我介紹：${visibleBio}`);
     await expect(detail).not.toContainText(hiddenBio);
+    await expect(page.locator('.leaderboard-item')).toHaveCSS('border-radius', '26px 26px 26px 8px');
 });
 
 test('積分歷史紀錄依來源顯示標籤', async ({page}) => {
@@ -176,6 +180,7 @@ test('積分歷史紀錄依來源顯示標籤', async ({page}) => {
     });
 
     const history = page.locator('#point-history-list');
+    await expect(history.locator('.point-history-item').first()).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(history.getByText('活動兌換', {exact: true})).toBeVisible();
     await expect(history.getByText('管理員調整', {exact: true})).toBeVisible();
 });
@@ -205,6 +210,7 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     });
 
     const redeemed = page.locator('[data-activity-id="redeemed-campaign"]');
+    await expect(redeemed).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(redeemed).toHaveClass(/redeemed/);
     await expect(redeemed.getByLabel('已兌換')).toBeVisible();
     await expect(redeemed).toContainText('已獲得 5 點');

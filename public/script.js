@@ -68,6 +68,7 @@ const callSetAdminRole = httpsCallable(functions, 'setAdminRole');
 const callBootstrapSuperAdmin = httpsCallable(functions, 'bootstrapSuperAdmin');
 const callCreateWish = httpsCallable(functions, 'createWish');
 const callListWishes = httpsCallable(functions, 'listWishes');
+const callToggleWishLike = httpsCallable(functions, 'toggleWishLike');
 const callListPublishedAnnouncements = httpsCallable(functions, 'listPublishedAnnouncements');
 const callListPublicQrCampaigns = httpsCallable(functions, 'listPublicQrCampaigns');
 const callGetPointHistory = httpsCallable(functions, 'getPointHistory');
@@ -102,22 +103,19 @@ window.getSparkLevel = (totalPoints = 0) => {
 window.renderSparkLevel = (totalPoints = 0) => {
     const level = window.getSparkLevel(totalPoints);
     const image = document.getElementById('spark-level-image');
-    const kicker = document.getElementById('spark-level-kicker');
     const name = document.getElementById('spark-level-name');
     const progress = document.getElementById('spark-level-progress');
-    const fill = document.getElementById('spark-level-progress-fill');
     const label = document.getElementById('spark-level-progress-label');
     if (image) {
         image.src = level.image;
         image.alt = level.name;
     }
-    if (kicker) kicker.textContent = `LV${level.level}`;
     if (name) name.textContent = level.name;
     if (progress) {
         progress.setAttribute('aria-valuenow', String(level.progress));
         progress.setAttribute('aria-valuetext', level.level === 4 ? '已達最高等級' : `${level.progress}/10`);
+        progress.style.setProperty('--spark-progress', `${level.progress * 10}%`);
     }
-    if (fill) fill.style.width = `${level.progress * 10}%`;
     if (label) {
         label.textContent = level.level === 4
             ? 'LV. 4（已達最高等級）'
@@ -673,6 +671,10 @@ window.loginAsGuest = async () => {
 };
 
 // ========== 許願池 ==========
+let wishes = [];
+const wishCategoryLabels = {suggestion: '建議', feedback: '回饋', curiosity: '好奇', other: '其他'};
+const wishCategories = Object.keys(wishCategoryLabels);
+
 const formatWishTime = (millis) => {
     if (!millis) return '剛剛';
     return new Intl.DateTimeFormat('zh-TW', {
@@ -683,18 +685,28 @@ const formatWishTime = (millis) => {
     }).format(new Date(millis));
 };
 
-window.loadWishes = async () => {
+window.renderWishes = () => {
     const list = document.getElementById('wish-list');
     if (!list) return;
-    list.innerHTML = '<p class="empty-history">正在載入留言⋯⋯</p>';
-    try {
-        const response = await callListWishes();
-        const wishes = Array.isArray(response.data) ? response.data : [];
-        const categoryLabels = {suggestion: '建議', feedback: '回饋', curiosity: '好奇'};
-        list.innerHTML = wishes.length ? wishes.map(wish => `
-            <article class="wish-message-card">
+    const filter = document.getElementById('wish-filter')?.value || 'latest';
+    let visibleWishes = filter === 'replied'
+        ? wishes.filter(wish => Boolean(wish.adminReply))
+        : [...wishes];
+    visibleWishes.sort((a, b) => {
+        if (filter === 'popular') {
+            const popularityDifference = (Number(b.likesCount) || 0) - (Number(a.likesCount) || 0);
+            if (popularityDifference) return popularityDifference;
+        }
+        return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+    });
+
+    list.innerHTML = visibleWishes.length ? visibleWishes.map(wish => {
+        const category = wishCategories.includes(wish.category) ? wish.category : 'other';
+        const likesCount = Math.max(0, Number(wish.likesCount) || 0);
+        return `
+            <article class="wish-message-card wish-category--${category}" data-wish-id="${escapeHtml(wish.id)}">
                 <div class="wish-message-meta">
-                    <span><span class="wish-tag">${escapeHtml(categoryLabels[wish.category] || '建議')}</span> <span class="wish-author${wish.anonymous ? ' anonymous' : ''}">${escapeHtml(wish.authorName)}</span></span>
+                    <span><span class="wish-tag wish-category--${category}">${escapeHtml(wishCategoryLabels[category])}</span> <span class="wish-author${wish.anonymous ? ' anonymous' : ''}">${escapeHtml(wish.authorName)}</span></span>
                     <time>${escapeHtml(formatWishTime(wish.createdAt))}</time>
                 </div>
                 <p>${escapeHtml(wish.message)}</p>
@@ -703,13 +715,62 @@ window.loadWishes = async () => {
                         <strong>小火花管理員回覆</strong>
                         <p>${escapeHtml(wish.adminReply)}</p>
                     </div>` : ''}
-            </article>
-        `).join('') : '<p class="empty-history">目前還沒有留言，成為第一個留下想法的人吧！</p>';
+                <div class="wish-card-actions">
+                    <button type="button" class="wish-like-button${wish.likedByMe ? ' liked' : ''}" aria-label="${wish.likedByMe ? '取消按讚' : '按讚'}，目前 ${likesCount} 個讚" aria-pressed="${wish.likedByMe ? 'true' : 'false'}">
+                        <span class="wish-like-count">${likesCount}</span>
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21s-8-4.7-8-11a4.6 4.6 0 0 1 8-3.1A4.6 4.6 0 0 1 20 10c0 6.3-8 11-8 11Z"/></svg>
+                    </button>
+                </div>
+            </article>`;
+    }).join('') : `<p class="empty-history">${filter === 'replied' ? '目前還沒有管理者已回覆的留言。' : '目前還沒有留言，成為第一個留下想法的人吧！'}</p>`;
+};
+
+window.loadWishes = async () => {
+    const list = document.getElementById('wish-list');
+    if (!list) return;
+    list.innerHTML = '<p class="empty-history">正在載入留言⋯⋯</p>';
+    try {
+        const response = await callListWishes();
+        wishes = Array.isArray(response.data) ? response.data : [];
+        window.renderWishes();
     } catch (error) {
         console.error('載入許願池失敗：', error);
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '許願池載入失敗'))}</p>`;
     }
 };
+
+document.getElementById('wish-filter')?.addEventListener('change', window.renderWishes);
+
+document.querySelectorAll('.wish-category-button').forEach(categoryButton => {
+    categoryButton.addEventListener('click', () => {
+        document.querySelectorAll('.wish-category-button').forEach(button => {
+            button.setAttribute('aria-pressed', String(button === categoryButton));
+        });
+    });
+});
+
+document.getElementById('wish-list')?.addEventListener('click', async event => {
+    const likeButton = event.target.closest('.wish-like-button');
+    if (!likeButton) return;
+    if (!currentUser || window.isGuestMode) {
+        window.showToast('請先登入帳號再按讚');
+        return;
+    }
+    const card = likeButton.closest('[data-wish-id]');
+    if (!card || likeButton.disabled) return;
+    likeButton.disabled = true;
+    try {
+        const result = (await callToggleWishLike({wishId: card.dataset.wishId})).data;
+        wishes = wishes.map(wish => wish.id === card.dataset.wishId
+            ? {...wish, likedByMe: result.liked, likesCount: result.likesCount}
+            : wish);
+        window.renderWishes();
+    } catch (error) {
+        console.error('更新留言按讚狀態失敗：', error);
+        window.showToast(callableErrorMessage(error, '按讚失敗'));
+        likeButton.disabled = false;
+    }
+});
 
 window.openWishPool = () => {
     setMainNavVisible(false);
@@ -885,6 +946,12 @@ document.getElementById('wish-form')?.addEventListener('submit', async (event) =
     const input = document.getElementById('wish-message');
     const button = document.getElementById('send-wish-btn');
     const message = input.value.trim();
+    const selectedCategory = document.querySelector('.wish-category-button[aria-pressed="true"]')?.dataset.category;
+    if (!selectedCategory) {
+        window.showToast('請選擇本留言的主題類別');
+        document.querySelector('.wish-category-button')?.focus();
+        return;
+    }
     if (!message) {
         window.showToast('請先輸入留言內容');
         input.focus();
@@ -895,9 +962,10 @@ document.getElementById('wish-form')?.addEventListener('submit', async (event) =
         await callCreateWish({
             message,
             anonymous: document.getElementById('wish-anonymous').checked,
-            category: document.getElementById('wish-category').value
+            category: selectedCategory
         });
         input.value = '';
+        document.querySelectorAll('.wish-category-button').forEach(categoryButton => categoryButton.setAttribute('aria-pressed', 'false'));
         window.showToast('留言已送出');
         await window.loadWishes();
     } catch (error) {

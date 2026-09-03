@@ -164,7 +164,7 @@ const formatCampaignTime = (millis) => {
     }).format(new Date(millis));
 };
 
-const wishCategoryLabels = {suggestion: "建議", feedback: "回饋", curiosity: "好奇"};
+const wishCategoryLabels = {suggestion: "建議", feedback: "回饋", curiosity: "好奇", other: "其他"};
 
 const initializeCampaignTimes = () => {
     const start = new Date();
@@ -609,7 +609,7 @@ const renderAdminWishes = () => {
                     <button type="button" class="small-action-btn delete-wish">刪除留言</button>
                 </div>
             </article>
-        `).join("") : '<p class="empty-history">這個標籤目前沒有留言。</p>';
+        `).join("") : '<p class="empty-history">這個類別目前沒有留言。</p>';
 };
 
 const announcementCategoryLabels = {

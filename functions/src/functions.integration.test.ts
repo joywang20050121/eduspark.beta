@@ -42,6 +42,7 @@ type TestClient = {
   bootstrapSuperAdmin: ReturnType<typeof httpsCallable>;
   createWish: ReturnType<typeof httpsCallable>;
   listWishes: ReturnType<typeof httpsCallable>;
+  toggleWishLike: ReturnType<typeof httpsCallable>;
   replyWish: ReturnType<typeof httpsCallable>;
   deleteWish: ReturnType<typeof httpsCallable>;
   listPublishedAnnouncements: ReturnType<typeof httpsCallable>;
@@ -92,6 +93,7 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     bootstrapSuperAdmin: httpsCallable(functions, "bootstrapSuperAdmin"),
     createWish: httpsCallable(functions, "createWish"),
     listWishes: httpsCallable(functions, "listWishes"),
+    toggleWishLike: httpsCallable(functions, "toggleWishLike"),
     replyWish: httpsCallable(functions, "replyWish"),
     deleteWish: httpsCallable(functions, "deleteWish"),
     listPublishedAnnouncements: httpsCallable(functions, "listPublishedAnnouncements"),
@@ -232,6 +234,31 @@ describe("許願池", () => {
       id: (anonymousWish.data as {id: string}).id,
       deleted: true,
     });
+  });
+
+  test("留言支援其他類別，且每位使用者可切換一次按讚狀態", async () => {
+    const author = await createClient("wish-other-author");
+    const liker = await createClient("wish-liker");
+    const created = await author.createWish({message: "想分享其他想法", anonymous: false, category: "other"});
+    const wishId = (created.data as {id: string}).id;
+
+    const liked = (await liker.toggleWishLike({wishId})).data as {liked: boolean; likesCount: number};
+    assert.equal(liked.liked, true);
+    assert.equal(liked.likesCount, 1);
+    const visibleToLiker = (await liker.listWishes()).data as Array<{
+      id: string;
+      category: string;
+      likesCount: number;
+      likedByMe: boolean;
+    }>;
+    const likedWish = visibleToLiker.find((wish) => wish.id === wishId);
+    assert.equal(likedWish?.category, "other");
+    assert.equal(likedWish?.likesCount, 1);
+    assert.equal(likedWish?.likedByMe, true);
+
+    const unliked = (await liker.toggleWishLike({wishId})).data as {liked: boolean; likesCount: number};
+    assert.equal(unliked.liked, false);
+    assert.equal(unliked.likesCount, 0);
   });
 });
 

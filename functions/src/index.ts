@@ -31,7 +31,7 @@ const enforceAppCheck = process.env.ENFORCE_APP_CHECK === "true";
 const publicAppUrl = process.env.PUBLIC_APP_URL || "https://coespark-a3f6e.web.app";
 const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
 const callableOptions = {enforceAppCheck};
-const wishCategories = ["suggestion", "feedback", "curiosity"] as const;
+const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
 
 type AuthenticatedRequest<T = unknown> = CallableRequest<T> & {
   auth: NonNullable<CallableRequest<T>["auth"]>;
@@ -376,6 +376,14 @@ export const createWish = onCall(callableOptions, async (request) => {
 
 export const listWishes = onCall(callableOptions, async (request) => {
   const snapshot = await db.collection("wishes").orderBy("createdAt", "desc").limit(100).get();
+  const likedWishIds = new Set<string>();
+  if (request.auth && snapshot.docs.length) {
+    const likeSnapshots = await db.getAll(...snapshot.docs.map((item) =>
+      item.ref.collection("likes").doc(request.auth!.uid)));
+    likeSnapshots.forEach((item, index) => {
+      if (item.exists) likedWishIds.add(snapshot.docs[index].id);
+    });
+  }
   return snapshot.docs.map((item) => {
     const data = item.data();
     const anonymous = data.anonymous === true;
@@ -389,7 +397,37 @@ export const listWishes = onCall(callableOptions, async (request) => {
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
       adminReply: typeof data.adminReply === "string" ? data.adminReply : "",
       repliedAt: data.repliedAt instanceof Timestamp ? data.repliedAt.toMillis() : null,
+      likesCount: Number.isInteger(data.likesCount) && data.likesCount > 0 ? data.likesCount : 0,
+      likedByMe: likedWishIds.has(item.id),
     };
+  });
+});
+
+export const toggleWishLike = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const wishId = requiredText(request.data?.wishId, "留言代碼", 128);
+  const wishRef = db.doc(`wishes/${wishId}`);
+  const likeRef = wishRef.collection("likes").doc(request.auth.uid);
+
+  return db.runTransaction(async (transaction) => {
+    const [wishSnapshot, likeSnapshot] = await Promise.all([
+      transaction.get(wishRef),
+      transaction.get(likeRef),
+    ]);
+    if (!wishSnapshot.exists) throw new HttpsError("not-found", "找不到這則留言");
+    const currentCount = Math.max(0, Number(wishSnapshot.data()?.likesCount) || 0);
+    const liked = !likeSnapshot.exists;
+    const likesCount = liked ? currentCount + 1 : Math.max(0, currentCount - 1);
+    transaction.update(wishRef, {likesCount});
+    if (liked) {
+      transaction.create(likeRef, {
+        userUid: request.auth.uid,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      transaction.delete(likeRef);
+    }
+    return {id: wishId, liked, likesCount};
   });
 });
 

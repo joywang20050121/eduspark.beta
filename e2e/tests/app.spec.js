@@ -28,6 +28,15 @@ test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
     await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv2.png');
     await expect(page.locator('#spark-level-progress')).toHaveAttribute('aria-valuenow', '8');
     await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 2（8/10）');
+    await expect(page.locator('#spark-level-kicker')).toHaveCount(0);
+    expect(await page.locator('#spark-level-progress').evaluate(element =>
+        getComputedStyle(element).getPropertyValue('--spark-progress').trim())).toBe('80%');
+
+    const pointIconBackgrounds = await page.evaluate(() => ({
+        home: getComputedStyle(document.querySelector('.home-points-button')).backgroundImage,
+        activity: getComputedStyle(document.querySelector('.top-spark-points')).backgroundImage
+    }));
+    expect(pointIconBackgrounds.home).toBe(pointIconBackgrounds.activity);
 
     await page.evaluate(() => window.renderSparkLevel(30));
     await expect(page.getByRole('heading', {name: '幻藍大火焰'})).toBeVisible();
@@ -42,16 +51,35 @@ test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page
 
     const stage = page.locator('.spark-character-stage');
     const stageBox = await stage.boundingBox();
-    expect(stageBox.width).toBeLessThanOrEqual(294);
+    const wishButtonBox = await page.locator('.home-wish-button').boundingBox();
+    expect(stageBox.width).toBeLessThanOrEqual(270);
     expect(stageBox.height).toBeCloseTo(244, 1);
+    expect(stageBox.x + stageBox.width).toBeLessThanOrEqual(wishButtonBox.x);
     await expect(stage).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
     await expect(page.locator('#spark-level-image')).toHaveCSS('animation-name', 'sparkFloat');
     await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('font-size', '12px');
-    await expect(page.locator('.home-points-button span')).toHaveCSS('margin-top', '17px');
+    await expect(page.locator('.home-points-button span')).toHaveCSS('margin-top', '10px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('line-height', '12px');
     await expect(page.locator('.home-scan-button')).toHaveCSS('font-size', '17px');
+});
+
+test('短螢幕桌面版完整顯示角色與首頁按鈕', async ({page}) => {
+    await page.setViewportSize({width: 1280, height: 675});
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.evaluate(() => window.renderSparkLevel(20));
+
+    const stage = page.locator('.spark-character-stage');
+    const stageBox = await stage.boundingBox();
+    const mapButtonBox = await page.locator('.home-map-button').boundingBox();
+    const navBox = await page.locator('#main-nav').boundingBox();
+    expect(stageBox.height).toBeGreaterThanOrEqual(184);
+    expect(stageBox.height).toBeLessThanOrEqual(195);
+    await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
+    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv3.png');
+    expect(mapButtonBox.y + mapButtonBox.height).toBeLessThanOrEqual(navBox.y);
 });
 
 test('沒有公告時顯示敬請期待', async ({page}) => {
@@ -67,6 +95,9 @@ test('沒有公告時顯示敬請期待', async ({page}) => {
     await page.locator('.nav-item[data-view="view-reward"]').click();
 
     await expect(page.locator('#view-reward')).toHaveClass(/active/);
+    await expect(page.locator('#view-reward .back-btn')).toHaveCount(0);
+    await expect(page.locator('#view-reward .announcement-filter-control')).toBeVisible();
+    await expect(page.locator('#announcement-filter')).toHaveValue('all');
     await expect(page.getByRole('heading', {name: '公佈欄'})).toBeVisible();
     await expect(page.getByRole('heading', {name: '敬請期待'})).toBeVisible();
     await expect(page.getByRole('img', {name: '小火花'})).toBeVisible();
@@ -97,6 +128,8 @@ test('公告保留換行並可依類型篩選', async ({page}) => {
     await page.getByRole('button', {name: '訪客遊玩'}).click();
     await page.locator('.nav-item[data-view="view-reward"]').click();
 
+    const headingBox = await page.getByRole('heading', {name: '公佈欄'}).boundingBox();
+    expect(headingBox.y).toBeLessThan(90);
     const eventCard = page.locator('.announcement-event');
     await expect(eventCard).toHaveCSS('border-radius', '26px 26px 26px 8px');
     const lines = eventCard.locator('.announcement-rich-content > div');
@@ -122,6 +155,8 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
                 authorName: '匿名',
                 anonymous: true,
                 category: 'suggestion',
+                likesCount: 3,
+                likedByMe: false,
                 adminReply: '謝謝你的建議，我們會安排看看！',
                 createdAt: Date.now()
             }]})
@@ -135,10 +170,47 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
     await expect(page.locator('#wish-list')).toContainText('希望多一些交流活動');
     await expect(page.locator('#wish-list')).toContainText('謝謝你的建議，我們會安排看看！');
     await expect(page.locator('.wish-admin-reply')).toContainText('小火花管理員回覆');
+    await expect(page.locator('.wish-tag')).toHaveText('建議');
+    await expect(page.locator('.wish-like-count')).toHaveText('3');
+    await expect(page.locator('#wish-filter')).toHaveValue('latest');
+    await expect(page.getByText('每一個想法都將成為點亮教院的小火苗！')).toBeVisible();
     await expect(page.locator('.wish-message-card')).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(page.locator('.wish-message-card')).toHaveCSS('overflow', 'hidden');
     await expect(page.locator('#wish-form')).toBeHidden();
     await expect(page.locator('#wish-guest-note')).toBeVisible();
+});
+
+test('許願池可依熱門與管理者回覆篩選，類別按鈕會切換顏色', async ({page}) => {
+    await page.route('**/listWishes', async route => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({result: [
+                {id: 'latest', message: '最新留言', authorName: '甲', category: 'suggestion', likesCount: 1, createdAt: 300},
+                {id: 'popular', message: '熱門留言', authorName: '乙', category: 'curiosity', likesCount: 9, createdAt: 200},
+                {id: 'replied', message: '已回覆留言', authorName: '丙', category: 'other', likesCount: 2, createdAt: 100, adminReply: '管理者回覆'}
+            ]})
+        });
+    });
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.getByRole('button', {name: '許願池'}).click();
+
+    await expect(page.locator('.wish-message-card').first()).toContainText('最新留言');
+    await page.locator('#wish-filter').selectOption('popular');
+    await expect(page.locator('.wish-message-card').first()).toContainText('熱門留言');
+    await page.locator('#wish-filter').selectOption('replied');
+    await expect(page.locator('.wish-message-card')).toHaveCount(1);
+    await expect(page.locator('.wish-message-card')).toContainText('已回覆留言');
+
+    await page.locator('#wish-form').evaluate(form => { form.hidden = false; });
+    await page.getByRole('button', {name: '送出留言'}).click();
+    await expect(page.locator('#toast')).toHaveText('請選擇本留言的主題類別');
+    const curiosityButton = page.getByRole('button', {name: '好奇'});
+    await curiosityButton.click();
+    await expect(curiosityButton).toHaveAttribute('aria-pressed', 'true');
+    await expect(curiosityButton).toHaveCSS('background-color', 'rgb(209, 123, 79)');
+    await expect(page.getByRole('button', {name: '建議'})).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('點擊排行榜頭像會顯示使用者資訊', async ({page}) => {

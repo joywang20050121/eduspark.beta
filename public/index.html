@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="/spark2.png">
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=21">
+    <link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 
@@ -83,7 +83,6 @@
                 </div>
                 <div class="home-account-actions">
                     <button class="home-points-button" type="button" onclick="window.openPointHistory()" aria-label="查看積分歷史紀錄">
-                        <svg aria-hidden="true" viewBox="0 0 28 36"><path d="M15.4 1.5c1.2 6.5-4.7 8.8-4.7 14.1 0 2.2 1.4 3.7 3.2 3.7 3.4 0 4.8-3.8 4.1-7.3 4.7 3.8 7.3 7.9 7.3 12.2 0 6.5-5 10.3-11.3 10.3S2.7 30.7 2.7 24.1C2.7 15.8 9.6 10.5 15.4 1.5Z"/></svg>
                         <span class="global-points">0</span>
                     </button>
                     <button class="home-profile-button" type="button" onclick="window.switchView('view-profile')" aria-label="查看個人資料">
@@ -96,10 +95,8 @@
                 <div class="spark-character-stage">
                     <img id="spark-level-image" src="assets/levels/lv1.png" alt="初生火苗" class="spark-level-image">
                 </div>
-                <p id="spark-level-kicker" class="spark-level-kicker">LV1</p>
                 <h2 id="spark-level-name" class="spark-level-name">初生火苗</h2>
                 <div id="spark-level-progress" class="spark-level-progress" role="progressbar" aria-label="升級進度" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0">
-                    <div id="spark-level-progress-fill" class="spark-level-progress-fill"></div>
                     <div class="spark-level-progress-ticks" aria-hidden="true"></div>
                 </div>
                 <p id="spark-level-progress-label" class="spark-level-progress-label">LV. 1（0/10）</p>
@@ -267,13 +264,22 @@
         <div id="view-wishes" class="view wish-view">
             <div class="nav-bar wish-nav-bar">
                 <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回首頁</button>
+                <label class="wish-filter-control">
+                    <span>篩選器</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z"/></svg>
+                    <select id="wish-filter" aria-label="篩選留言">
+                        <option value="latest">最新留言</option>
+                        <option value="popular">最熱門留言</option>
+                        <option value="replied">管理者已回覆的留言</option>
+                    </select>
+                </label>
             </div>
             <header class="wish-hero">
-                <div class="wish-hero-mark" aria-hidden="true">✦</div>
+                <img class="wish-hero-avatar" src="spark2.png" alt="小火花">
                 <div>
                     <p class="wish-eyebrow">小火花許願池</p>
                     <h2 class="wish-title">留下任何你想對小火花說的話/建議/好奇！</h2>
-                    <p class="wish-intro">每一個想法，都可能成為讓教院更好的下一顆火花。</p>
+                    <p class="wish-intro">每一個想法都將成為點亮教院的小火苗！</p>
                 </div>
             </header>
             <div id="wish-list" class="wish-list" aria-live="polite">
@@ -281,13 +287,13 @@
             </div>
             <form id="wish-form" class="wish-composer">
                 <div class="wish-options-row">
-                    <label>標籤
-                        <select id="wish-category">
-                            <option value="suggestion">建議</option>
-                            <option value="feedback">回饋</option>
-                            <option value="curiosity">好奇</option>
-                        </select>
-                    </label>
+                    <fieldset class="wish-category-picker">
+                        <legend>類別</legend>
+                        <button type="button" class="wish-category-button wish-category--suggestion" data-category="suggestion" aria-pressed="false">建議</button>
+                        <button type="button" class="wish-category-button wish-category--feedback" data-category="feedback" aria-pressed="false">回饋</button>
+                        <button type="button" class="wish-category-button wish-category--curiosity" data-category="curiosity" aria-pressed="false">好奇</button>
+                        <button type="button" class="wish-category-button wish-category--other" data-category="other" aria-pressed="false">其他</button>
+                    </fieldset>
                     <label class="wish-anonymous-option"><input id="wish-anonymous" type="checkbox">匿名留言</label>
                 </div>
                 <div class="wish-input-row">
@@ -299,23 +305,25 @@
         </div>
 
         <!-- ===== 公佈欄 ===== -->
-        <div id="view-reward" class="view">
-            <div class="nav-bar">
-                <button class="back-btn" onclick="window.switchView('view-home')">◀ 返回主頁</button>
-            </div>
+        <div id="view-reward" class="view announcement-view">
             <div class="board-heading">
-                <p class="board-eyebrow">COE SPARK NEWS</p>
+                <div class="announcement-top-row">
+                    <p class="board-eyebrow">COE SPARK NEWS</p>
+                    <label class="wish-filter-control announcement-filter-control">
+                        <span>篩選器</span>
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z"/></svg>
+                        <select id="announcement-filter" aria-label="篩選公告">
+                            <option value="all">全部公告</option>
+                            <option value="general">重要公告</option>
+                            <option value="event">活動消息</option>
+                            <option value="update">功能更新</option>
+                            <option value="reward">兌換活動</option>
+                        </select>
+                    </label>
+                </div>
                 <h2 class="section-title">公佈欄</h2>
                 <p class="section-desc">活動消息、新功能與小火花的重要通知都會放在這裡。</p>
             </div>
-            <label class="announcement-filter-label" for="announcement-filter">顯示類型</label>
-            <select id="announcement-filter" class="announcement-filter">
-                <option value="all">全部公告</option>
-                <option value="general">重要公告</option>
-                <option value="event">活動消息</option>
-                <option value="update">功能更新</option>
-                <option value="reward">兌換活動</option>
-            </select>
             <div id="announcement-list" class="announcement-list">
                 <div class="announcement-empty">
                     <img src="spark1.png" alt="小火花">
@@ -376,7 +384,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=19"></script>
+<script type="module" src="script.js?v=20"></script>
 
 </body>
 </html>

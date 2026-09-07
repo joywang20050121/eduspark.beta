@@ -800,16 +800,54 @@ const activityCategoryLabels = {
     interactive: '互動展覽',
     limited: '限定活動'
 };
+const activityMapCategories = {
+    daily: {title: '每日打卡', description: '每天來看看，完成打卡累積小火花。'},
+    limited: {title: '限定活動', description: '期間限定的特別企劃都在這裡。'},
+    in_person: {title: '活動', description: '查看近期舉辦的校園活動。'},
+    interactive: {title: '展覽', description: '走進展場互動，探索教院裡的新鮮事。'}
+};
 let publicQrCampaigns = [];
+let selectedActivityCategory = null;
+
+window.showActivityMapPanel = () => {
+    selectedActivityCategory = null;
+    const mapPanel = document.getElementById('activity-map-panel');
+    const categoryPanel = document.getElementById('activity-category-panel');
+    if (mapPanel) mapPanel.hidden = false;
+    if (categoryPanel) categoryPanel.hidden = true;
+};
+
+window.openActivityMap = () => {
+    window.showActivityMapPanel();
+    window.switchView('view-challenge');
+};
+
+window.openActivityCategory = (category) => {
+    const categoryData = activityMapCategories[category];
+    if (!categoryData) return;
+    selectedActivityCategory = category;
+    const mapPanel = document.getElementById('activity-map-panel');
+    const categoryPanel = document.getElementById('activity-category-panel');
+    if (mapPanel) mapPanel.hidden = true;
+    if (categoryPanel) categoryPanel.hidden = false;
+    document.getElementById('activity-category-title').textContent = categoryData.title;
+    document.getElementById('activity-category-desc').textContent = categoryData.description;
+    document.querySelector('.view-container').scrollTop = 0;
+    window.renderActivities();
+};
+
+window.closeActivityCategory = () => {
+    window.showActivityMapPanel();
+    document.querySelector('.view-container').scrollTop = 0;
+};
 
 window.renderActivities = (campaigns) => {
     const list = document.getElementById('activity-list');
     if (!list) return;
     if (Array.isArray(campaigns)) publicQrCampaigns = campaigns;
-    const selectedCategory = document.getElementById('activity-category-filter')?.value || 'all';
-    const visibleCampaigns = selectedCategory === 'all'
-        ? publicQrCampaigns
-        : publicQrCampaigns.filter(campaign => campaign.category === selectedCategory);
+    const visibleCampaigns = selectedActivityCategory
+        ? publicQrCampaigns.filter(campaign => campaign.category === selectedActivityCategory)
+        : [];
     list.innerHTML = visibleCampaigns.length ? visibleCampaigns.map(campaign => `
         <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
             <span class="activity-card-content">
@@ -845,8 +883,6 @@ window.loadActivities = async () => {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '活動載入失敗'))}</p>`;
     }
 };
-
-document.getElementById('activity-category-filter')?.addEventListener('change', () => window.renderActivities());
 
 window.openActivityDetail = (campaign) => {
     document.getElementById('activity-detail-content').innerHTML = `

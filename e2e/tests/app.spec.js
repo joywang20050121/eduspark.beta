@@ -310,12 +310,30 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     const available = page.locator('[data-activity-id="available-campaign"]');
     await expect(available).not.toHaveClass(/redeemed/);
     await expect(available).toContainText('完成可獲得 3 點');
-    await expect(page.locator('#activity-category-filter option')).toHaveCount(5);
-    await page.locator('#activity-category-filter').selectOption('interactive');
+    await page.evaluate(() => window.openActivityCategory('interactive'));
     await expect(redeemed).toHaveCount(0);
     await expect(page.locator('[data-activity-id="available-campaign"]')).toContainText('互動展覽');
-    await page.locator('#activity-category-filter').selectOption('limited');
+    await page.evaluate(() => window.openActivityCategory('limited'));
     await expect(page.locator('#activity-list')).toHaveText('敬請期待！');
+});
+
+test('教院生活地圖以四個分類入口瀏覽活動', async ({page}) => {
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.getByRole('button', {name: '查看教院生活地圖'}).click();
+
+    const map = page.locator('#activity-map-panel');
+    await expect(map.getByRole('heading', {name: '教院生活地圖'})).toBeVisible();
+    await expect(map.getByRole('button', {name: '每日打卡'})).toBeVisible();
+    await expect(map.getByRole('button', {name: '限定活動'})).toBeVisible();
+    await expect(map.getByRole('button', {name: '活動', exact: true})).toBeVisible();
+    await expect(map.getByRole('button', {name: '展覽', exact: true})).toBeVisible();
+
+    await map.getByRole('button', {name: '展覽', exact: true}).click();
+    await expect(page.locator('#activity-category-panel')).toBeVisible();
+    await expect(page.locator('#activity-category-title')).toHaveText('展覽');
+    await page.getByRole('button', {name: '返回地圖'}).click();
+    await expect(map).toBeVisible();
 });
 
 test('活動詳情保留後台輸入的換行與空白', async ({page}) => {

@@ -1521,8 +1521,28 @@ button:active { transform: scale(0.97) !important; }
     .wish-category-button { padding-inline: 8px; }
 }
 
-.activity-filter-control { display: grid; gap: 6px; margin: -8px 0 16px; color: #68726e; font-size: 12px; font-weight: 700; }
-.activity-filter-control select { width: 100%; border: 1px solid rgba(92,118,109,.24); border-radius: 13px; padding: 10px 12px; background: rgba(255,255,255,.78); color: #394b45; font: inherit; font-size: 14px; }
+.activity-map-view { padding-inline: 24px; }
+.activity-map-nav { margin-bottom: 35px; }
+.activity-map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 8px 4px 0; }
+.activity-map-entry { border: 0; color: #fff; font: 700 24px/1.2 var(--font-family); letter-spacing: .08em; cursor: pointer; box-shadow: 0 9px 22px rgba(67,65,58,.08); }
+.activity-map-entry > svg { width: 43px; height: 43px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.activity-map-entry--wide { grid-column: 1 / -1; display: grid; grid-template-columns: 48px 1fr 28px; align-items: center; gap: 12px; min-height: 82px; border-radius: 28px; padding: 15px 23px 15px 28px; text-align: center; }
+.activity-map-entry--wide .activity-map-arrow { width: 28px; height: 28px; stroke-width: 3.5; }
+.activity-map-entry--tile { display: flex; min-width: 0; min-height: 158px; flex-direction: column; align-items: center; justify-content: center; gap: 17px; border-radius: 28px; padding: 22px 12px; }
+.activity-map-entry--tile > svg { width: 51px; height: 51px; }
+.activity-map-entry--daily { background: #cb734f; }
+.activity-map-entry--limited { background: #617898; }
+.activity-map-entry--in-person { background: #617e71; }
+.activity-map-entry--interactive { background: #9bae7c; }
+.activity-map-entry:focus-visible { outline: 4px solid rgba(255,255,255,.95); outline-offset: -7px; }
+
+@media (max-width: 360px) {
+    .activity-map-view { padding-inline: 18px; }
+    .activity-map-entry { font-size: 21px; }
+    .activity-map-entry--wide { min-height: 75px; padding-inline: 20px; }
+    .activity-map-entry--tile { min-height: 145px; }
+}
+
 .activity-list { display: grid; gap: 12px; }
 .activity-card { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; border: 1px solid rgba(92,118,109,.18); border-radius: var(--card-radius); padding: 17px; background: rgba(255,255,255,.78); color: #596963; font: inherit; text-align: left; cursor: pointer; box-shadow: 0 6px 18px rgba(69,82,76,.07); transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease; }
 .activity-card-content { display: grid; gap: 7px; min-width: 0; }

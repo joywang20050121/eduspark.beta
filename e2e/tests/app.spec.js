@@ -315,6 +315,8 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     await expect(page.locator('[data-activity-id="available-campaign"]')).toContainText('互動展覽');
     await page.evaluate(() => window.openActivityCategory('limited'));
     await expect(page.locator('#activity-list')).toHaveText('敬請期待！');
+    await expect(page.locator('.activity-empty-watermark')).toHaveCSS('filter', /grayscale\(1\)/);
+    await expect(page.locator('.activity-empty-watermark')).toHaveCSS('opacity', '0.13');
 });
 
 test('教院生活地圖以四個分類入口瀏覽活動', async ({page}) => {

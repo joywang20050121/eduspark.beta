@@ -862,7 +862,11 @@ window.renderActivities = (campaigns) => {
                         <path d="m7 12.5 3.2 3.2L17.5 8.5"/>
                     </svg>
                 </span>` : ''}
-        </button>`).join('') : '<p class="empty-history">敬請期待！</p>';
+        </button>`).join('') : `
+            <div class="activity-empty-state">
+                <img class="activity-empty-watermark" src="spark2.png" alt="" aria-hidden="true">
+                <p>敬請期待！</p>
+            </div>`;
     list.querySelectorAll('[data-activity-id]').forEach(button => {
         button.addEventListener('click', () => {
             const campaign = visibleCampaigns.find(item => item.id === button.dataset.activityId);

@@ -329,7 +329,7 @@ button:active { transform: scale(0.97) !important; }
 .home-map-button {
     width: 100%;
     padding: 15px 16px;
-    border: 4px solid #444;
+    border: 4px solid #454545;
     border-radius: 999px;
     background: rgba(255,255,255,.18);
     color: #444;
@@ -1535,12 +1535,16 @@ button:active { transform: scale(0.97) !important; }
 .activity-map-entry--in-person { background: #617e71; }
 .activity-map-entry--interactive { background: #9bae7c; }
 .activity-map-entry:focus-visible { outline: 4px solid rgba(255,255,255,.95); outline-offset: -7px; }
+.activity-empty-state { position: relative; min-height: 170px; overflow: hidden; display: grid; place-items: center; border: 1px solid rgba(92,118,109,.13); border-radius: var(--card-radius); background: rgba(255,255,255,.58); box-shadow: 0 8px 22px rgba(69,82,76,.06); }
+.activity-empty-state p { position: relative; z-index: 1; color: #626a67; font-size: 18px; font-weight: 700; letter-spacing: .12em; }
+.activity-empty-watermark { position: absolute; top: -32px; left: -35px; width: 150px; height: 150px; border-radius: 50%; object-fit: cover; filter: grayscale(1) contrast(.8); opacity: .13; mix-blend-mode: multiply; transform: rotate(-10deg); pointer-events: none; }
 
 @media (max-width: 360px) {
     .activity-map-view { padding-inline: 18px; }
     .activity-map-entry { font-size: 21px; }
     .activity-map-entry--wide { min-height: 75px; padding-inline: 20px; }
     .activity-map-entry--tile { min-height: 145px; }
+    .activity-empty-watermark { width: 135px; height: 135px; }
 }
 
 .activity-list { display: grid; gap: 12px; }

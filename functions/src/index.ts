@@ -1,4 +1,4 @@
-import {randomBytes} from "node:crypto";
+import {createHash, randomBytes} from "node:crypto";
 import {initializeApp} from "firebase-admin/app";
 import {getAuth, UserRecord} from "firebase-admin/auth";
 import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -32,6 +32,31 @@ const publicAppUrl = process.env.PUBLIC_APP_URL || "https://coespark-a3f6e.web.a
 const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").trim().toLowerCase();
 const callableOptions = {enforceAppCheck};
 const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
+const qrCampaignCategories = ["daily", "in_person", "interactive", "limited"] as const;
+
+function qrCampaignCategory(value: unknown): typeof qrCampaignCategories[number] {
+  if (value === undefined || value === null || value === "") return "in_person";
+  const category = requiredText(value, "活動類別", 20);
+  if (!qrCampaignCategories.includes(category as typeof qrCampaignCategories[number])) {
+    throw new HttpsError("invalid-argument", "活動類別不存在");
+  }
+  return category as typeof qrCampaignCategories[number];
+}
+
+function storedQrCampaignCategory(value: unknown): typeof qrCampaignCategories[number] {
+  return qrCampaignCategories.includes(value as typeof qrCampaignCategories[number]) ?
+    value as typeof qrCampaignCategories[number] : "in_person";
+}
+
+function wishLikeActorId(request: CallableRequest<{visitorId?: unknown}>, required: boolean) {
+  if (request.auth) return request.auth.uid;
+  const visitorId = typeof request.data?.visitorId === "string" ? request.data.visitorId.trim() : "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(visitorId)) {
+    if (required) throw new HttpsError("invalid-argument", "訪客識別碼格式不正確");
+    return null;
+  }
+  return `guest_${createHash("sha256").update(visitorId).digest("hex")}`;
+}
 
 type AuthenticatedRequest<T = unknown> = CallableRequest<T> & {
   auth: NonNullable<CallableRequest<T>["auth"]>;
@@ -377,9 +402,10 @@ export const createWish = onCall(callableOptions, async (request) => {
 export const listWishes = onCall(callableOptions, async (request) => {
   const snapshot = await db.collection("wishes").orderBy("createdAt", "desc").limit(100).get();
   const likedWishIds = new Set<string>();
-  if (request.auth && snapshot.docs.length) {
+  const likeActorId = wishLikeActorId(request, false);
+  if (likeActorId && snapshot.docs.length) {
     const likeSnapshots = await db.getAll(...snapshot.docs.map((item) =>
-      item.ref.collection("likes").doc(request.auth!.uid)));
+      item.ref.collection("likes").doc(likeActorId)));
     likeSnapshots.forEach((item, index) => {
       if (item.exists) likedWishIds.add(snapshot.docs[index].id);
     });
@@ -404,10 +430,10 @@ export const listWishes = onCall(callableOptions, async (request) => {
 });
 
 export const toggleWishLike = onCall(callableOptions, async (request) => {
-  requireAuth(request);
   const wishId = requiredText(request.data?.wishId, "留言代碼", 128);
+  const likeActorId = wishLikeActorId(request, true)!;
   const wishRef = db.doc(`wishes/${wishId}`);
-  const likeRef = wishRef.collection("likes").doc(request.auth.uid);
+  const likeRef = wishRef.collection("likes").doc(likeActorId);
 
   return db.runTransaction(async (transaction) => {
     const [wishSnapshot, likeSnapshot] = await Promise.all([
@@ -421,7 +447,8 @@ export const toggleWishLike = onCall(callableOptions, async (request) => {
     transaction.update(wishRef, {likesCount});
     if (liked) {
       transaction.create(likeRef, {
-        userUid: request.auth.uid,
+        actorId: likeActorId,
+        authenticated: Boolean(request.auth),
         createdAt: FieldValue.serverTimestamp(),
       });
     } else {
@@ -710,6 +737,7 @@ async function campaignQr(campaignId: string) {
 export const createQrCampaign = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const title = requiredText(request.data?.title, "活動名稱", 80);
+  const category = qrCampaignCategory(request.data?.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = positiveInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
@@ -721,6 +749,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
   const campaignId = randomBytes(18).toString("hex");
   await db.doc(`qrCampaigns/${campaignId}`).create({
     title,
+    category,
     description,
     points,
     startsAt: Timestamp.fromMillis(startsAtMillis),
@@ -731,13 +760,14 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return {id: campaignId, title, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
+  return {id: campaignId, title, category, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
 });
 
 export const updateQrCampaign = onCall(callableOptions, async (request) => {
   requireAdmin(request);
   const campaignId = requiredText(request.data?.campaignId, "活動代碼", 64);
   const title = requiredText(request.data?.title, "活動名稱", 80);
+  const requestedCategory = request.data?.category === undefined ? null : qrCampaignCategory(request.data.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = positiveInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
@@ -752,16 +782,18 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
     .limit(1)
     .get();
   const auditRef = db.collection("adminAuditLogs").doc();
-  await db.runTransaction(async (transaction) => {
+  const category = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(campaignRef);
     if (!snapshot.exists) throw new HttpsError("not-found", "找不到這個活動");
     const campaign = snapshot.data()!;
+    const category = requestedCategory ?? storedQrCampaignCategory(campaign.category);
     const hasRedemptions = numberOrZero(campaign.redemptionCount) > 0 || !legacyRedemption.empty;
     if (numberOrZero(campaign.points) !== points && hasRedemptions) {
       throw new HttpsError("failed-precondition", "已有使用者兌換此活動，無法修改活動點數");
     }
     transaction.update(campaignRef, {
       title,
+      category,
       description,
       points,
       startsAt: Timestamp.fromMillis(startsAtMillis),
@@ -777,9 +809,10 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
       title,
       createdAt: FieldValue.serverTimestamp(),
     });
+    return category;
   });
 
-  return {id: campaignId, title, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis};
+  return {id: campaignId, title, category, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis};
 });
 
 export const listQrCampaigns = onCall(callableOptions, async (request) => {
@@ -790,6 +823,7 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
     return {
       id: item.id,
       title: data.title,
+      category: storedQrCampaignCategory(data.category),
       description: typeof data.description === "string" ? data.description : "",
       points: data.points,
       active: data.active === true,
@@ -817,6 +851,7 @@ export const listPublicQrCampaigns = onCall(callableOptions, async (request) => 
     return {
       id: item.id,
       title: typeof data.title === "string" ? data.title : "",
+      category: storedQrCampaignCategory(data.category),
       description: typeof data.description === "string" ? data.description : "",
       points: numberOrZero(data.points),
       active: data.active === true,
@@ -840,6 +875,7 @@ export const getQrCampaign = onCall(callableOptions, async (request) => {
   return {
     id: snapshot.id,
     title: data.title,
+    category: storedQrCampaignCategory(data.category),
     description: typeof data.description === "string" ? data.description : "",
     points: data.points,
     active: data.active === true,

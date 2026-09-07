@@ -132,6 +132,27 @@
     opacity: 0.55;
 }
 
+.admin-modal .form-group select {
+    width: 100%;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    padding: 12px;
+    background: #fff;
+    color: var(--admin-ink);
+    font: inherit;
+}
+
+.campaign-category-tag {
+    display: inline-block;
+    margin: 0 7px 5px 0;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: rgba(78, 98, 92, 0.12);
+    color: var(--admin-green);
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .admin-secondary-button {
     border: 1px solid rgba(38, 51, 47, 0.24);
     background: transparent;

@@ -1521,9 +1521,16 @@ button:active { transform: scale(0.97) !important; }
     .wish-category-button { padding-inline: 8px; }
 }
 
+.activity-filter-control { display: grid; gap: 6px; margin: -8px 0 16px; color: #68726e; font-size: 12px; font-weight: 700; }
+.activity-filter-control select { width: 100%; border: 1px solid rgba(92,118,109,.24); border-radius: 13px; padding: 10px 12px; background: rgba(255,255,255,.78); color: #394b45; font: inherit; font-size: 14px; }
 .activity-list { display: grid; gap: 12px; }
 .activity-card { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; border: 1px solid rgba(92,118,109,.18); border-radius: var(--card-radius); padding: 17px; background: rgba(255,255,255,.78); color: #596963; font: inherit; text-align: left; cursor: pointer; box-shadow: 0 6px 18px rgba(69,82,76,.07); transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease; }
 .activity-card-content { display: grid; gap: 7px; min-width: 0; }
+.activity-category-tag { width: fit-content; border-radius: 999px; padding: 4px 9px; background: rgba(92,118,109,.12); color: #4e625c; font-size: 11px; font-weight: 700; }
+.activity-category--daily { background: #e6f2e9; color: #416b59; }
+.activity-category--in_person { background: #f5e5df; color: #9a5845; }
+.activity-category--interactive { background: #e5edf0; color: #526d78; }
+.activity-category--limited { background: #f4ebc9; color: #766225; }
 .activity-card.redeemed { border-color: rgba(78,117,104,.32); background: #edf7f0; box-shadow: 0 6px 18px rgba(78,117,104,.1); }
 .activity-card-title { color: #2f3d38; font-size: 18px; font-weight: 700; }
 .activity-card-points { color: var(--color-red); font-weight: 700; }

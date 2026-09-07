@@ -259,6 +259,32 @@ describe("許願池", () => {
     const unliked = (await liker.toggleWishLike({wishId})).data as {liked: boolean; likesCount: number};
     assert.equal(unliked.liked, false);
     assert.equal(unliked.likesCount, 0);
+
+    const guestApp = initializeApp({
+      apiKey: "demo-key",
+      projectId: "demo-eduspark",
+      authDomain: "demo-eduspark.firebaseapp.com",
+    }, "wish-guest-like");
+    const guestFunctions = getFunctions(guestApp, "asia-east1");
+    connectFunctionsEmulator(guestFunctions, "127.0.0.1", 5001);
+    const guestToggleWishLike = httpsCallable(guestFunctions, "toggleWishLike");
+    const guestListWishes = httpsCallable(guestFunctions, "listWishes");
+    const visitorId = "123e4567-e89b-42d3-a456-426614174000";
+    try {
+      const guestLiked = (await guestToggleWishLike({wishId, visitorId})).data as {
+        liked: boolean;
+        likesCount: number;
+      };
+      assert.equal(guestLiked.liked, true);
+      assert.equal(guestLiked.likesCount, 1);
+      const visibleToGuest = (await guestListWishes({visitorId})).data as Array<{
+        id: string;
+        likedByMe: boolean;
+      }>;
+      assert.equal(visibleToGuest.find((wish) => wish.id === wishId)?.likedByMe, true);
+    } finally {
+      await deleteApp(guestApp);
+    }
   });
 });
 
@@ -323,6 +349,7 @@ describe("管理員 QR code 管理", () => {
     const client = await createClient("erin", true);
     const created = await client.createQrCampaign({
       title: "管理員整合測試",
+      category: "interactive",
       description: "第一段活動說明\n\n  保留縮排的第二段",
       points: 8,
       startsAt: Date.now() - 60_000,
@@ -334,6 +361,7 @@ describe("管理員 QR code 管理", () => {
       svg: string;
       pngDataUrl: string;
       active: boolean;
+      category: string;
       description: string;
     };
     assert.match(campaign.id, /^[a-f0-9]{36}$/);
@@ -341,24 +369,28 @@ describe("管理員 QR code 管理", () => {
     assert.match(campaign.svg, /<svg/);
     assert.match(campaign.pngDataUrl, /^data:image\/png;base64,/);
     assert.equal(campaign.active, true);
+    assert.equal(campaign.category, "interactive");
     assert.equal(campaign.description, "第一段活動說明\n\n  保留縮排的第二段");
 
     const updated = await client.updateQrCampaign({
       campaignId: campaign.id,
       title: "更新後的活動名稱",
+      category: "limited",
       description: "更新後的活動說明",
       points: 9,
       startsAt: Date.now() - 120_000,
       endsAt: Date.now() + 120_000,
     });
     assert.equal((updated.data as {title: string}).title, "更新後的活動名稱");
+    assert.equal((updated.data as {category: string}).category, "limited");
 
     const listed = await client.listQrCampaigns();
-    const listedCampaign = (listed.data as Array<{id: string; title: string; points: number}>).find((item) => item.id === campaign.id);
+    const listedCampaign = (listed.data as Array<{id: string; title: string; category: string; points: number}>).find((item) => item.id === campaign.id);
     assert.equal(listedCampaign?.title, "更新後的活動名稱");
     assert.equal(listedCampaign?.points, 9);
+    assert.equal(listedCampaign?.category, "limited");
     const publicList = await client.listPublicQrCampaigns();
-    assert.ok((publicList.data as Array<{id: string}>).some((item) => item.id === campaign.id));
+    assert.equal((publicList.data as Array<{id: string; category: string}>).find((item) => item.id === campaign.id)?.category, "limited");
 
     const disabled = await client.setQrCampaignStatus({campaignId: campaign.id, active: false});
     assert.deepEqual(disabled.data, {id: campaign.id, active: false});

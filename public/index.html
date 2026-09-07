@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="/spark2.png">
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=25">
+    <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -200,6 +200,16 @@
             </div>
             <h2 class="section-title">教院生活地圖</h2>
             <p class="section-desc">查看小火花近期活動與累積點數方式。</p>
+            <label class="activity-filter-control" for="activity-category-filter">
+                <span>活動類別</span>
+                <select id="activity-category-filter">
+                    <option value="all">全部類別</option>
+                    <option value="daily">每日打卡</option>
+                    <option value="in_person">實體活動</option>
+                    <option value="interactive">互動展覽</option>
+                    <option value="limited">限定活動</option>
+                </select>
+            </label>
             <div id="activity-list" class="activity-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
         </div>
 
@@ -384,7 +394,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=20"></script>
+<script type="module" src="script.js?v=23"></script>
 
 </body>
 </html>

@@ -165,6 +165,12 @@ const formatCampaignTime = (millis) => {
 };
 
 const wishCategoryLabels = {suggestion: "建議", feedback: "回饋", curiosity: "好奇", other: "其他"};
+const campaignCategoryLabels = {
+    daily: "每日打卡",
+    in_person: "實體活動",
+    interactive: "互動展覽",
+    limited: "限定活動"
+};
 
 const initializeCampaignTimes = () => {
     const start = new Date();
@@ -178,6 +184,7 @@ const resetCampaignForm = () => {
     document.getElementById("campaign-form-title").textContent = "新增活動 QR code";
     document.getElementById("save-campaign").textContent = "建立 QR code";
     document.getElementById("admin-campaign-title").value = "";
+    document.getElementById("admin-campaign-category").value = "";
     document.getElementById("admin-campaign-description").value = "";
     document.getElementById("admin-campaign-points").value = "2";
     document.getElementById("admin-campaign-points").disabled = false;
@@ -194,6 +201,7 @@ const openCampaignEditor = async (campaignId) => {
         document.getElementById("campaign-form-title").textContent = "編輯活動";
         document.getElementById("save-campaign").textContent = "儲存修改";
         document.getElementById("admin-campaign-title").value = campaign.title || "";
+        document.getElementById("admin-campaign-category").value = campaign.category || "in_person";
         document.getElementById("admin-campaign-description").value = campaign.description || "";
         document.getElementById("admin-campaign-points").value = String(campaign.points || 1);
         document.getElementById("admin-campaign-points").disabled = campaign.hasRedemptions === true;
@@ -339,6 +347,7 @@ window.renderAdminCampaigns = (campaigns = []) => {
                     <span class="campaign-status ${campaign.active ? "active" : ""}">${campaign.active ? "啟用中" : "已停用"}</span>
                 </div>
                 <div class="campaign-meta">
+                    <span class="campaign-category-tag">${escapeHtml(campaignCategoryLabels[campaign.category] || "實體活動")}</span>
                     ${Number(campaign.points)} 點<br>
                     ${escapeHtml(formatCampaignTime(campaign.startsAt))}～${escapeHtml(formatCampaignTime(campaign.endsAt))}
                 </div>
@@ -384,20 +393,21 @@ window.renderAdminCampaigns = (campaigns = []) => {
 
 document.getElementById("save-campaign").addEventListener("click", async (event) => {
     const title = document.getElementById("admin-campaign-title").value.trim();
+    const category = document.getElementById("admin-campaign-category").value;
     const description = document.getElementById("admin-campaign-description").value;
     const points = Number(document.getElementById("admin-campaign-points").value);
     const startsAt = new Date(document.getElementById("admin-campaign-start").value).getTime();
     const endsAt = new Date(document.getElementById("admin-campaign-end").value).getTime();
-    if (!title || !description.trim() || !Number.isInteger(points) || !startsAt || !endsAt) {
-        showToast("請完整填寫活動名稱、內文、點數與時間");
+    if (!title || !category || !description.trim() || !Number.isInteger(points) || !startsAt || !endsAt) {
+        showToast("請完整填寫活動名稱、類別、內文、點數與時間");
         return;
     }
     const button = event.currentTarget;
     button.disabled = true;
     try {
         const response = editingCampaignId
-            ? await callUpdateQrCampaign({campaignId: editingCampaignId, title, description, points, startsAt, endsAt})
-            : await callCreateQrCampaign({title, description, points, startsAt, endsAt});
+            ? await callUpdateQrCampaign({campaignId: editingCampaignId, title, category, description, points, startsAt, endsAt})
+            : await callCreateQrCampaign({title, category, description, points, startsAt, endsAt});
         const wasEditing = Boolean(editingCampaignId);
         closeAdminModal("campaign-form-modal");
         if (!wasEditing) showQrPreview(response.data);

@@ -145,6 +145,7 @@ test('公告保留換行並可依類型篩選', async ({page}) => {
 });
 
 test('訪客可以看許願池但不能留言', async ({page}) => {
+    let liked = false;
     await page.route('**/listWishes', async route => {
         await route.fulfill({
             status: 200,
@@ -162,6 +163,14 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
             }]})
         });
     });
+    await page.route('**/toggleWishLike', async route => {
+        liked = !liked;
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({result: {id: 'wish-1', liked, likesCount: liked ? 4 : 3}})
+        });
+    });
     await openApp(page);
     await page.getByRole('button', {name: '訪客遊玩'}).click();
     await page.getByRole('button', {name: '許願池'}).click();
@@ -172,6 +181,12 @@ test('訪客可以看許願池但不能留言', async ({page}) => {
     await expect(page.locator('.wish-admin-reply')).toContainText('小火花管理員回覆');
     await expect(page.locator('.wish-tag')).toHaveText('建議');
     await expect(page.locator('.wish-like-count')).toHaveText('3');
+    await page.getByRole('button', {name: /按讚，目前 3 個讚/}).click();
+    await expect(page.locator('.wish-like-count')).toHaveText('4');
+    await expect(page.locator('.wish-like-button')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', {name: /取消按讚，目前 4 個讚/}).click();
+    await expect(page.locator('.wish-like-count')).toHaveText('3');
+    await expect(page.locator('.wish-like-button')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('#wish-filter')).toHaveValue('latest');
     await expect(page.getByText('每一個想法都將成為點亮教院的小火苗！')).toBeVisible();
     await expect(page.locator('.wish-message-card')).toHaveCSS('border-radius', '26px 26px 26px 8px');
@@ -268,6 +283,7 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
         window.renderActivities([{
             id: 'redeemed-campaign',
             title: '迎新交流會',
+            category: 'in_person',
             description: '測試活動',
             points: 5,
             startsAt: Date.now() - 60_000,
@@ -276,6 +292,7 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
         }, {
             id: 'available-campaign',
             title: '尚未參加的活動',
+            category: 'interactive',
             description: '測試活動',
             points: 3,
             startsAt: Date.now() - 60_000,
@@ -293,12 +310,19 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     const available = page.locator('[data-activity-id="available-campaign"]');
     await expect(available).not.toHaveClass(/redeemed/);
     await expect(available).toContainText('完成可獲得 3 點');
+    await expect(page.locator('#activity-category-filter option')).toHaveCount(5);
+    await page.locator('#activity-category-filter').selectOption('interactive');
+    await expect(redeemed).toHaveCount(0);
+    await expect(page.locator('[data-activity-id="available-campaign"]')).toContainText('互動展覽');
+    await page.locator('#activity-category-filter').selectOption('limited');
+    await expect(page.locator('#activity-list')).toHaveText('敬請期待！');
 });
 
 test('活動詳情保留後台輸入的換行與空白', async ({page}) => {
     await openApp(page);
     await page.evaluate(() => window.openActivityDetail({
         title: '排版測試活動',
+        category: 'limited',
         description: '第一段\n\n  保留縮排的第二段',
         points: 3,
         startsAt: Date.now() - 60_000,
@@ -308,6 +332,7 @@ test('活動詳情保留後台輸入的換行與空白', async ({page}) => {
     const description = page.locator('.activity-detail-description');
     await expect(description).toHaveText('第一段\n\n  保留縮排的第二段');
     await expect(description).toHaveCSS('white-space', 'pre-wrap');
+    await expect(page.locator('.activity-detail .activity-category-tag')).toHaveText('限定活動');
 });
 
 test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({page}) => {
@@ -318,6 +343,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
             body: JSON.stringify({result: {
                 id: 'campaign-one',
                 title: '迎新交流會',
+                category: 'interactive',
                 description: '活動說明',
                 points: 5,
                 active: true,
@@ -343,6 +369,9 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     await page.locator('#open-campaign-form').click();
     const campaignDialog = page.getByRole('dialog', {name: '新增活動 QR code'});
     await expect(campaignDialog).toBeVisible();
+    await expect(campaignDialog.locator('#admin-campaign-category option')).toHaveText([
+        '請選擇活動類別', '每日打卡', '實體活動', '互動展覽', '限定活動'
+    ]);
     await campaignDialog.getByRole('button', {name: '關閉', exact: true}).click();
     await expect(page.locator('#download-qr')).toHaveText('下載 PNG');
     await expect(page.locator('#admin-wish-filter')).toHaveCSS('min-width', '118px');
@@ -351,6 +380,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     await page.evaluate(() => window.renderAdminCampaigns([{
         id: 'campaign-one',
         title: '迎新交流會',
+        category: 'interactive',
         description: '活動說明',
         points: 5,
         active: true,
@@ -361,6 +391,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     const editDialog = page.getByRole('dialog', {name: '編輯活動'});
     await expect(editDialog).toBeVisible();
     await expect(editDialog.locator('#admin-campaign-points')).toBeDisabled();
+    await expect(editDialog.locator('#admin-campaign-category')).toHaveValue('interactive');
     await expect(editDialog).toContainText('已有使用者兌換，活動點數不能修改。');
     await editDialog.getByRole('button', {name: '關閉', exact: true}).click();
 

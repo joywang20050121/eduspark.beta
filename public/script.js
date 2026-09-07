@@ -674,6 +674,19 @@ window.loginAsGuest = async () => {
 let wishes = [];
 const wishCategoryLabels = {suggestion: '建議', feedback: '回饋', curiosity: '好奇', other: '其他'};
 const wishCategories = Object.keys(wishCategoryLabels);
+let fallbackWishVisitorId = crypto.randomUUID();
+
+const getWishVisitorId = () => {
+    try {
+        const storageKey = 'eduspark-wish-visitor-id';
+        const storedId = localStorage.getItem(storageKey);
+        if (storedId) return storedId;
+        localStorage.setItem(storageKey, fallbackWishVisitorId);
+    } catch (error) {
+        console.warn('無法儲存許願池訪客識別碼：', error);
+    }
+    return fallbackWishVisitorId;
+};
 
 const formatWishTime = (millis) => {
     if (!millis) return '剛剛';
@@ -730,7 +743,7 @@ window.loadWishes = async () => {
     if (!list) return;
     list.innerHTML = '<p class="empty-history">正在載入留言⋯⋯</p>';
     try {
-        const response = await callListWishes();
+        const response = await callListWishes({visitorId: getWishVisitorId()});
         wishes = Array.isArray(response.data) ? response.data : [];
         window.renderWishes();
     } catch (error) {
@@ -752,15 +765,14 @@ document.querySelectorAll('.wish-category-button').forEach(categoryButton => {
 document.getElementById('wish-list')?.addEventListener('click', async event => {
     const likeButton = event.target.closest('.wish-like-button');
     if (!likeButton) return;
-    if (!currentUser || window.isGuestMode) {
-        window.showToast('請先登入帳號再按讚');
-        return;
-    }
     const card = likeButton.closest('[data-wish-id]');
     if (!card || likeButton.disabled) return;
     likeButton.disabled = true;
     try {
-        const result = (await callToggleWishLike({wishId: card.dataset.wishId})).data;
+        const result = (await callToggleWishLike({
+            wishId: card.dataset.wishId,
+            visitorId: getWishVisitorId()
+        })).data;
         wishes = wishes.map(wish => wish.id === card.dataset.wishId
             ? {...wish, likedByMe: result.liked, likesCount: result.likesCount}
             : wish);
@@ -782,13 +794,26 @@ window.openWishPool = () => {
 };
 
 const formatActivityRange = (start, end) => `${formatWishTime(start)} ～ ${formatWishTime(end)}`;
+const activityCategoryLabels = {
+    daily: '每日打卡',
+    in_person: '實體活動',
+    interactive: '互動展覽',
+    limited: '限定活動'
+};
+let publicQrCampaigns = [];
 
 window.renderActivities = (campaigns) => {
     const list = document.getElementById('activity-list');
     if (!list) return;
-    list.innerHTML = campaigns.length ? campaigns.map(campaign => `
+    if (Array.isArray(campaigns)) publicQrCampaigns = campaigns;
+    const selectedCategory = document.getElementById('activity-category-filter')?.value || 'all';
+    const visibleCampaigns = selectedCategory === 'all'
+        ? publicQrCampaigns
+        : publicQrCampaigns.filter(campaign => campaign.category === selectedCategory);
+    list.innerHTML = visibleCampaigns.length ? visibleCampaigns.map(campaign => `
         <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
             <span class="activity-card-content">
+                <span class="activity-category-tag activity-category--${escapeHtml(campaign.category || 'in_person')}">${escapeHtml(activityCategoryLabels[campaign.category] || '實體活動')}</span>
                 <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
                 <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
                 <span class="activity-card-points">${campaign.redeemed ? '已獲得' : '完成可獲得'} ${Number(campaign.points)} 點</span>
@@ -799,10 +824,10 @@ window.renderActivities = (campaigns) => {
                         <path d="m7 12.5 3.2 3.2L17.5 8.5"/>
                     </svg>
                 </span>` : ''}
-        </button>`).join('') : '<p class="empty-history">目前沒有活動，敬請期待！</p>';
+        </button>`).join('') : '<p class="empty-history">敬請期待！</p>';
     list.querySelectorAll('[data-activity-id]').forEach(button => {
         button.addEventListener('click', () => {
-            const campaign = campaigns.find(item => item.id === button.dataset.activityId);
+            const campaign = visibleCampaigns.find(item => item.id === button.dataset.activityId);
             if (campaign) window.openActivityDetail(campaign);
         });
     });
@@ -814,18 +839,21 @@ window.loadActivities = async () => {
     list.innerHTML = '<p class="empty-history">正在載入活動⋯⋯</p>';
     try {
         const response = await callListPublicQrCampaigns();
-        const campaigns = Array.isArray(response.data) ? response.data : [];
-        window.renderActivities(campaigns);
+        publicQrCampaigns = Array.isArray(response.data) ? response.data : [];
+        window.renderActivities();
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, '活動載入失敗'))}</p>`;
     }
 };
+
+document.getElementById('activity-category-filter')?.addEventListener('change', () => window.renderActivities());
 
 window.openActivityDetail = (campaign) => {
     document.getElementById('activity-detail-content').innerHTML = `
         <header class="activity-detail-header">
             <p class="wish-eyebrow">活動詳情</p>
             <h2>${escapeHtml(campaign.title)}</h2>
+            <span class="activity-category-tag activity-category--${escapeHtml(campaign.category || 'in_person')}">${escapeHtml(activityCategoryLabels[campaign.category] || '實體活動')}</span>
             <p class="activity-detail-time">${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</p>
         </header>
         <div class="activity-detail-description">${escapeHtml(campaign.description || '尚無活動說明')}</div>

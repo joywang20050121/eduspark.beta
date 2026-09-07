@@ -13,8 +13,8 @@ test('訪客可以進入首頁', async ({page}) => {
 
     await expect(page.locator('#view-home')).toHaveClass(/active/);
     await expect(page.locator('#main-nav')).toBeVisible();
-    await expect(page.locator('body')).toHaveCSS('font-family', /Inter/);
-    await expect(page.locator('.form-group input').first()).toHaveCSS('font-family', /Inter/);
+    await expect(page.locator('body')).toHaveCSS('font-family', /Huninn/);
+    await expect(page.locator('.form-group input').first()).toHaveCSS('font-family', /Huninn/);
     await expect(page.getByRole('button', {name: '掃描累積點數'})).toBeVisible();
     await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toBeVisible();
 });

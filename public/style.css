@@ -240,9 +240,10 @@ button:active { transform: scale(0.97) !important; }
 }
 
 .spark-character-stage {
+    position: relative;
     width: min(100%, 300px);
     height: 286px;
-    overflow: hidden;
+    overflow: visible;
     display: grid;
     place-items: center;
     border-radius: var(--card-radius);
@@ -252,9 +253,12 @@ button:active { transform: scale(0.97) !important; }
 
 .spark-level-image {
     --spark-image-scale: 1;
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
+    object-position: center;
     animation: sparkFloat 3.2s ease-in-out infinite;
     transform: scale(var(--spark-image-scale));
     transition: opacity .25s ease, transform .35s ease;
@@ -307,6 +311,12 @@ button:active { transform: scale(0.97) !important; }
     display: grid;
     gap: 13px;
     margin-top: 28px;
+}
+
+.home-primary-actions .home-scan-button,
+.home-primary-actions .home-map-button {
+    min-height: 82px;
+    border-radius: 28px;
 }
 
 .home-scan-button {

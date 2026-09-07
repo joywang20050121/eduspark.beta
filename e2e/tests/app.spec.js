@@ -17,6 +17,12 @@ test('訪客可以進入首頁', async ({page}) => {
     await expect(page.locator('.form-group input').first()).toHaveCSS('font-family', /Huninn/);
     await expect(page.getByRole('button', {name: '掃描累積點數'})).toBeVisible();
     await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toBeVisible();
+    const [scanButtonBox, mapButtonBox] = await Promise.all([
+        page.getByRole('button', {name: '掃描累積點數'}).boundingBox(),
+        page.getByRole('button', {name: '查看教院生活地圖'}).boundingBox()
+    ]);
+    expect(scanButtonBox.height).toBeCloseTo(82, 1);
+    expect(mapButtonBox.height).toBeCloseTo(scanButtonBox.height, 1);
 });
 
 test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
@@ -56,8 +62,13 @@ test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page
     expect(stageBox.height).toBeCloseTo(244, 1);
     expect(stageBox.x + stageBox.width).toBeLessThanOrEqual(wishButtonBox.x);
     await expect(stage).toHaveCSS('border-radius', '26px 26px 26px 8px');
+    await expect(stage).toHaveCSS('overflow', 'visible');
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
     await expect(page.locator('#spark-level-image')).toHaveCSS('animation-name', 'sparkFloat');
+    const imageBox = await page.locator('#spark-level-image').boundingBox();
+    expect(imageBox.width).toBeCloseTo(stageBox.width, 1);
+    expect(imageBox.height).toBeCloseTo(stageBox.height, 1);
+    await expect(page.locator('#spark-level-image')).toHaveCSS('object-position', '50% 50%');
     await expect(page.locator('.home-title-text h1')).toHaveCSS('font-size', '21px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('font-size', '12px');
     await expect(page.locator('.home-points-button span')).toHaveCSS('margin-top', '10px');

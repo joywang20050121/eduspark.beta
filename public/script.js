@@ -793,7 +793,35 @@ window.openWishPool = () => {
     window.loadWishes();
 };
 
-const formatActivityRange = (start, end) => `${formatWishTime(start)} ～ ${formatWishTime(end)}`;
+const activityDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+});
+
+const activityDateTimeParts = (millis) => Object.fromEntries(
+    activityDateTimeFormatter.formatToParts(new Date(millis))
+        .filter(part => part.type !== 'literal')
+        .map(part => [part.type, part.value])
+);
+
+const formatActivityRange = (start, end) => {
+    const startParts = activityDateTimeParts(start);
+    const endParts = activityDateTimeParts(end);
+    const startDate = `${Number(startParts.month)}/${Number(startParts.day)}`;
+    const endDate = `${Number(endParts.month)}/${Number(endParts.day)}`;
+    const startTime = `${startParts.hour}:${startParts.minute}`;
+    const endTime = `${endParts.hour}:${endParts.minute}`;
+    const sameDate = startParts.year === endParts.year &&
+        startParts.month === endParts.month && startParts.day === endParts.day;
+    return sameDate
+        ? `${startDate} ${startTime}-${endTime}`
+        : `${startDate} ${startTime}-${endDate} ${endTime}`;
+};
 const activityCategoryLabels = {
     daily: '每日打卡',
     in_person: '實體活動',

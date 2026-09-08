@@ -369,6 +369,27 @@ test('活動詳情保留後台輸入的換行與空白', async ({page}) => {
     await expect(page.locator('.activity-detail .activity-category-tag')).toHaveText('限定活動');
 });
 
+test('活動時間使用24小時制並合併同日日期', async ({page}) => {
+    await openApp(page);
+    await page.evaluate(() => {
+        document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+        document.querySelector('#view-challenge').classList.add('active');
+        window.renderActivities([{
+            id: 'evening-event',
+            title: '晚間活動',
+            category: 'in_person',
+            description: '測試活動',
+            points: 2,
+            startsAt: Date.UTC(2026, 8, 15, 11, 0),
+            endsAt: Date.UTC(2026, 8, 15, 13, 0),
+            redeemed: false
+        }]);
+        window.openActivityCategory('in_person');
+    });
+
+    await expect(page.locator('[data-activity-id="evening-event"]')).toContainText('9/15 19:00-21:00');
+});
+
 test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({page}) => {
     await page.route('**/getQrCampaign', async route => {
         await route.fulfill({

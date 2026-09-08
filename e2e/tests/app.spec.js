@@ -316,6 +316,7 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     });
 
     const redeemed = page.locator('[data-activity-id="redeemed-campaign"]');
+    await expect(redeemed).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(redeemed).toHaveClass(/redeemed/);
     await expect(redeemed.getByLabel('已兌換')).toBeVisible();
     await expect(redeemed).toContainText('已獲得 5 點');

@@ -23,6 +23,8 @@ test('訪客可以進入首頁', async ({page}) => {
     ]);
     expect(scanButtonBox.height).toBeCloseTo(82, 1);
     expect(mapButtonBox.height).toBeCloseTo(scanButtonBox.height, 1);
+    await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toHaveCSS('background-color', 'rgb(92, 118, 109)');
+    await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
 test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
@@ -31,7 +33,7 @@ test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
     await page.evaluate(() => window.renderSparkLevel(18));
 
     await expect(page.getByRole('heading', {name: '探索火花'})).toBeVisible();
-    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv2.png');
+    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv2-transparent.png');
     await expect(page.locator('#spark-level-progress')).toHaveAttribute('aria-valuenow', '8');
     await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 2（8/10）');
     await expect(page.locator('#spark-level-kicker')).toHaveCount(0);
@@ -89,7 +91,7 @@ test('短螢幕桌面版完整顯示角色與首頁按鈕', async ({page}) => {
     expect(stageBox.height).toBeGreaterThanOrEqual(184);
     expect(stageBox.height).toBeLessThanOrEqual(195);
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
-    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv3.png');
+    await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv3-transparent.png');
     expect(mapButtonBox.y + mapButtonBox.height).toBeLessThanOrEqual(navBox.y);
 });
 

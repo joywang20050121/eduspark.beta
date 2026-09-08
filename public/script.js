@@ -86,10 +86,10 @@ window.isSuperAdmin = false;
 window.leaderboardMode = 'current';
 
 const sparkLevels = [
-    {level: 1, minimum: 0, name: '初生火苗', image: 'assets/levels/lv1.png'},
-    {level: 2, minimum: 10, name: '探索火花', image: 'assets/levels/lv2.png'},
-    {level: 3, minimum: 20, name: '熱情火焰', image: 'assets/levels/lv3.png'},
-    {level: 4, minimum: 30, name: '幻藍大火焰', image: 'assets/levels/lv4.png'}
+    {level: 1, minimum: 0, name: '初生火苗', image: 'assets/levels/lv1-transparent.png'},
+    {level: 2, minimum: 10, name: '探索火花', image: 'assets/levels/lv2-transparent.png'},
+    {level: 3, minimum: 20, name: '熱情火焰', image: 'assets/levels/lv3-transparent.png'},
+    {level: 4, minimum: 30, name: '幻藍大火焰', image: 'assets/levels/lv4-transparent.png'}
 ];
 
 window.getSparkLevel = (totalPoints = 0) => {

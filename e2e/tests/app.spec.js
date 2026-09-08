@@ -387,7 +387,7 @@ test('活動時間使用24小時制並合併同日日期', async ({page}) => {
         window.openActivityCategory('in_person');
     });
 
-    await expect(page.locator('[data-activity-id="evening-event"]')).toContainText('9/15 19:00-21:00');
+    await expect(page.locator('[data-activity-id="evening-event"]')).toContainText('9/15 19:00 - 21:00');
 });
 
 test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({page}) => {

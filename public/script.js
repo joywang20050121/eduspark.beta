@@ -819,8 +819,8 @@ const formatActivityRange = (start, end) => {
     const sameDate = startParts.year === endParts.year &&
         startParts.month === endParts.month && startParts.day === endParts.day;
     return sameDate
-        ? `${startDate} ${startTime}-${endTime}`
-        : `${startDate} ${startTime}-${endDate} ${endTime}`;
+        ? `${startDate} ${startTime} - ${endTime}`
+        : `${startDate} ${startTime} - ${endDate} ${endTime}`;
 };
 const activityCategoryLabels = {
     daily: '每日打卡',

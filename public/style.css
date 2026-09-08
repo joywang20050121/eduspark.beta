@@ -316,7 +316,7 @@ button:active { transform: scale(0.97) !important; }
 .home-primary-actions .home-scan-button,
 .home-primary-actions .home-map-button {
     min-height: 82px;
-    border-radius: 28px;
+    border-radius: 56px;
     font-size: 24px;
 }
 

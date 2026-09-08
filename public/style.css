@@ -317,6 +317,7 @@ button:active { transform: scale(0.97) !important; }
 .home-primary-actions .home-map-button {
     min-height: 82px;
     border-radius: 28px;
+    font-size: 24px;
 }
 
 .home-scan-button {
@@ -407,9 +408,9 @@ button:active { transform: scale(0.97) !important; }
     .spark-level-progress-label { margin-top: 7px; font-size: 16px; }
 
     .home-primary-actions { gap: 10px; margin-top: 20px; }
-    .main-btn.home-scan-button { gap: 10px; padding: 14px 0; font-size: 17px; }
+    .main-btn.home-scan-button { gap: 10px; padding: 14px 0; font-size: 24px; }
     .home-scan-button svg { width: 23px; height: 23px; }
-    .home-map-button { padding: 12px 14px; border-width: 3px; font-size: 16px; letter-spacing: .07em; }
+    .home-map-button { padding: 12px 14px; border-width: 3px; font-size: 24px; letter-spacing: .07em; }
     .home-wish-button { top: 126px; width: 60px; min-height: 70px; padding: 9px 7px 8px; border-radius: 24px 0 0 24px; }
     .home-wish-button svg { width: 30px; height: 30px; }
     .home-wish-button span { font-size: 10px; }
@@ -1550,6 +1551,8 @@ button:active { transform: scale(0.97) !important; }
 .activity-empty-watermark { position: absolute; top: -32px; left: -35px; width: 150px; height: 150px; border-radius: 50%; object-fit: cover; filter: grayscale(1) contrast(.8); opacity: .13; mix-blend-mode: multiply; transform: rotate(-10deg); pointer-events: none; }
 
 @media (max-width: 360px) {
+    .home-primary-actions .home-scan-button,
+    .home-primary-actions .home-map-button { font-size: 21px; }
     .activity-map-view { padding-inline: 18px; }
     .activity-map-entry { font-size: 21px; }
     .activity-map-entry--wide { min-height: 75px; padding-inline: 20px; }

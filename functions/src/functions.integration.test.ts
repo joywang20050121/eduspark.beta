@@ -51,6 +51,8 @@ type TestClient = {
   deleteAnnouncement: ReturnType<typeof httpsCallable>;
   batchAddPoints: ReturnType<typeof httpsCallable>;
   getPointHistory: ReturnType<typeof httpsCallable>;
+  getDailyCheckIns: ReturnType<typeof httpsCallable>;
+  submitDailyCheckIn: ReturnType<typeof httpsCallable>;
 };
 
 let testEnvironment: RulesTestEnvironment;
@@ -102,6 +104,8 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     deleteAnnouncement: httpsCallable(functions, "deleteAnnouncement"),
     batchAddPoints: httpsCallable(functions, "batchAddPoints"),
     getPointHistory: httpsCallable(functions, "getPointHistory"),
+    getDailyCheckIns: httpsCallable(functions, "getDailyCheckIns"),
+    submitDailyCheckIn: httpsCallable(functions, "submitDailyCheckIn"),
   };
   clients.push(client);
   return client;
@@ -428,6 +432,69 @@ describe("管理員 QR code 管理", () => {
       endsAt: Date.now() + 120_000,
     });
     assert.equal((updated.data as {title: string}).title, "名稱仍可更新");
+  });
+});
+
+describe("每日打卡", () => {
+  test("一天只能打卡一次，並同步積分與紀錄", async () => {
+    const client = await createClient("daily-once");
+    await client.saveProfile({realName: "日常同學", nickname: "日常", dept: "教院", bio: "", avatar: ""});
+
+    const first = (await client.submitDailyCheckIn({
+      mood: "happy",
+      note: "完成了今天想做的事。",
+    })).data as {earned: number; streak: number; points: number; todayKey: string};
+    assert.equal(first.earned, 1);
+    assert.equal(first.streak, 1);
+    assert.equal(first.points, 1);
+
+    await assert.rejects(() => client.submitDailyCheckIn({
+      mood: "calm",
+      note: "第二次不應成功。",
+    }), (error: {code?: string}) => error.code === "functions/already-exists");
+
+    const state = (await client.getDailyCheckIns()).data as {
+      streak: number;
+      records: Array<{dateKey: string; mood: string; note: string; streak: number; pointsEarned: number; createdAt: number | null}>;
+    };
+    assert.equal(state.streak, 1);
+    assert.deepEqual(state.records[0], {
+      dateKey: first.todayKey,
+      mood: "happy",
+      note: "完成了今天想做的事。",
+      streak: 1,
+      pointsEarned: 1,
+      createdAt: state.records[0].createdAt,
+    });
+    const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
+    assert.equal(history[0]?.delta, 1);
+    assert.equal(history[0]?.type, "daily");
+  });
+
+  test("連續第七天可獲得三點", async () => {
+    const client = await createClient("daily-seven");
+    await client.saveProfile({realName: "連勝同學", nickname: "連勝", dept: "教院", bio: "", avatar: ""});
+    const taipeiDay = Math.floor((Date.now() + 8 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000));
+    const yesterdayKey = new Date((taipeiDay - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(),
+        `usersPrivate/${client.auth.currentUser!.uid}/dailyCheckIns/${yesterdayKey}`), {
+        dateKey: yesterdayKey,
+        mood: "calm",
+        note: "第六天",
+        streak: 6,
+        pointsEarned: 1,
+        createdAt: Timestamp.now(),
+      });
+    });
+
+    const result = (await client.submitDailyCheckIn({
+      mood: "happy",
+      note: "完成第七天。",
+    })).data as {earned: number; streak: number; points: number};
+    assert.equal(result.streak, 7);
+    assert.equal(result.earned, 3);
+    assert.equal(result.points, 3);
   });
 });
 

@@ -147,7 +147,7 @@ jobs:
           ./functions/node_modules/.bin/firebase deploy
           --project coespark-a3f6e
           --only
-          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getPointHistory,functions:setAdminRole
+          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getDailyCheckIns,functions:submitDailyCheckIn,functions:getPointHistory,functions:setAdminRole
           --non-interactive
 
       - name: Verify production site

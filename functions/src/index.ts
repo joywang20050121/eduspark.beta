@@ -33,6 +33,24 @@ const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").tri
 const callableOptions = {enforceAppCheck};
 const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
 const qrCampaignCategories = ["daily", "in_person", "interactive", "limited"] as const;
+const dailyMoods = ["happy", "sad", "angry", "calm"] as const;
+const taipeiOffsetMillis = 8 * 60 * 60 * 1000;
+const dayMillis = 24 * 60 * 60 * 1000;
+
+function taipeiDayNumber(nowMillis = Date.now()): number {
+  return Math.floor((nowMillis + taipeiOffsetMillis) / dayMillis);
+}
+
+function dateKeyFromDayNumber(dayNumber: number): string {
+  return new Date(dayNumber * dayMillis).toISOString().slice(0, 10);
+}
+
+function dailyMood(value: unknown): typeof dailyMoods[number] {
+  if (!dailyMoods.includes(value as typeof dailyMoods[number])) {
+    throw new HttpsError("invalid-argument", "請選擇今天的心情");
+  }
+  return value as typeof dailyMoods[number];
+}
 
 function qrCampaignCategory(value: unknown): typeof qrCampaignCategories[number] {
   if (value === undefined || value === null || value === "") return "in_person";
@@ -1025,6 +1043,83 @@ export const batchAddPoints = onCall(callableOptions, async (request) => {
     });
   });
   return {updated: userIds.length, points, reason};
+});
+
+export const getDailyCheckIns = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const todayNumber = taipeiDayNumber();
+  const todayKey = dateKeyFromDayNumber(todayNumber);
+  const yesterdayKey = dateKeyFromDayNumber(todayNumber - 1);
+  const snapshot = await db.collection(`usersPrivate/${request.auth.uid}/dailyCheckIns`)
+    .orderBy("dateKey", "desc").limit(100).get();
+  const records = snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      dateKey: item.id,
+      mood: dailyMoods.includes(data.mood) ? data.mood : "calm",
+      note: typeof data.note === "string" ? data.note : "",
+      streak: Math.max(1, numberOrZero(data.streak)),
+      pointsEarned: Math.max(0, numberOrZero(data.pointsEarned)),
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
+    };
+  });
+  const latest = records[0];
+  const streak = latest && (latest.dateKey === todayKey || latest.dateKey === yesterdayKey) ? latest.streak : 0;
+  return {todayKey, streak, records};
+});
+
+export const submitDailyCheckIn = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const mood = dailyMood(request.data?.mood);
+  const note = requiredText(request.data?.note, "今天的小事", 200);
+  const todayNumber = taipeiDayNumber();
+  const todayKey = dateKeyFromDayNumber(todayNumber);
+  const yesterdayKey = dateKeyFromDayNumber(todayNumber - 1);
+  const userRef = db.doc(`users/${request.auth.uid}`);
+  const todayRef = db.doc(`usersPrivate/${request.auth.uid}/dailyCheckIns/${todayKey}`);
+  const yesterdayRef = db.doc(`usersPrivate/${request.auth.uid}/dailyCheckIns/${yesterdayKey}`);
+  const ledgerRef = db.doc(`usersPrivate/${request.auth.uid}/pointLedger/daily_${todayKey}`);
+
+  return db.runTransaction(async (transaction) => {
+    const [userSnapshot, todaySnapshot, yesterdaySnapshot] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(todayRef),
+      transaction.get(yesterdayRef),
+    ]);
+    if (!userSnapshot.exists) throw new HttpsError("failed-precondition", "請先建立個人檔案");
+    if (todaySnapshot.exists) throw new HttpsError("already-exists", "今天已經完成打卡了");
+
+    const previousStreak = yesterdaySnapshot.exists ?
+      Math.max(0, numberOrZero(yesterdaySnapshot.data()?.streak)) : 0;
+    const streak = previousStreak + 1;
+    const earned = streak % 7 === 0 ? 3 : 1;
+    const currentPoints = numberOrZero(userSnapshot.data()?.points);
+    const currentTotal = Math.max(currentPoints, numberOrZero(userSnapshot.data()?.totalPoints));
+    const points = currentPoints + earned;
+    const totalPoints = currentTotal + earned;
+
+    transaction.update(userRef, {
+      points,
+      totalPoints,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(todayRef, {
+      dateKey: todayKey,
+      mood,
+      note,
+      streak,
+      pointsEarned: earned,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(ledgerRef, {
+      delta: earned,
+      type: "daily",
+      sourceId: todayKey,
+      label: streak % 7 === 0 ? `每日打卡・連續 ${streak} 天` : "每日打卡",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return {todayKey, mood, note, streak, earned, points, totalPoints};
+  });
 });
 
 export const getPointHistory = onCall(callableOptions, async (request) => {

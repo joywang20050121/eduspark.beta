@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="/spark2.png">
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=33">
+    <link rel="stylesheet" href="style.css?v=47">
 </head>
 <body>
 
@@ -92,9 +92,10 @@
             </div>
 
             <section class="spark-level-card" aria-labelledby="spark-level-name">
-                <div class="spark-character-stage">
+                <button class="spark-character-stage" type="button" onclick="window.openSparkGallery()" aria-label="開啟角色圖鑑">
                     <img id="spark-level-image" src="assets/levels/lv1-transparent.png" alt="初生火苗" class="spark-level-image">
-                </div>
+                    <span class="spark-gallery-hint" aria-hidden="true">查看圖鑑</span>
+                </button>
                 <h2 id="spark-level-name" class="spark-level-name">初生火苗</h2>
                 <div id="spark-level-progress" class="spark-level-progress" role="progressbar" aria-label="升級進度" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0">
                     <div class="spark-level-progress-ticks" aria-hidden="true"></div>
@@ -144,6 +145,29 @@
                 <a href="https://www.instagram.com/coespark/" target="_blank" rel="noopener noreferrer" style="color: var(--color-red); font-weight: bold;">https://www.instagram.com/coespark/</a>
             </p>
         </div>
+
+        <div id="spark-gallery-overlay" class="detail-overlay" onclick="window.closeSparkGallery()"></div>
+        <section class="spark-gallery-modal" id="spark-gallery-modal" role="dialog" aria-modal="true" aria-labelledby="spark-gallery-title" onclick="event.stopPropagation()">
+            <button class="spark-gallery-close" type="button" onclick="window.closeSparkGallery()" aria-label="關閉角色圖鑑">×</button>
+            <p class="spark-gallery-eyebrow">角色圖鑑</p>
+            <div class="spark-gallery-card" aria-live="polite">
+                <button id="spark-gallery-prev" class="spark-gallery-arrow spark-gallery-arrow-prev" type="button" onclick="window.stepSparkGallery(-1)" aria-label="上一個等級">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M15.5 5 8.5 12l7 7"/></svg>
+                </button>
+                <div class="spark-gallery-artwork">
+                    <span id="spark-gallery-current-badge" class="spark-gallery-current-badge">目前等級</span>
+                    <img id="spark-gallery-image" src="assets/levels/lv1-transparent.png" alt="初生火苗">
+                </div>
+                <button id="spark-gallery-next" class="spark-gallery-arrow spark-gallery-arrow-next" type="button" onclick="window.stepSparkGallery(1)" aria-label="下一個等級">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8.5 5 7 7-7 7"/></svg>
+                </button>
+                <p id="spark-gallery-level" class="spark-gallery-level">LV. 1</p>
+                <h2 id="spark-gallery-title">初生火苗</h2>
+                <p id="spark-gallery-requirement" class="spark-gallery-requirement">升級點數 0/10</p>
+                <p id="spark-gallery-description" class="spark-gallery-description"></p>
+            </div>
+            <div id="spark-gallery-thumbnails" class="spark-gallery-thumbnails" aria-label="選擇角色階段"></div>
+        </section>
 
         <!-- ===== 個人資料編輯 ===== -->
         <div id="view-profile" class="view">
@@ -203,7 +227,7 @@
                 <p class="section-desc">查看小火花近期活動與累積點數方式。</p>
 
                 <div class="activity-map-grid">
-                    <button class="activity-map-entry activity-map-entry--wide activity-map-entry--daily" type="button" onclick="window.openActivityCategory('daily')">
+                    <button class="activity-map-entry activity-map-entry--wide activity-map-entry--daily" type="button" onclick="window.openDailyCheckIn()">
                         <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="7" y="10" width="34" height="31" rx="4"/><path d="M15 6v9M33 6v9M7 20h34"/><path d="M15 27h3M23 27h3M31 27h3M15 34h3M23 34h3M31 34h3"/></svg>
                         <span>每日打卡</span>
                         <svg class="activity-map-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
@@ -235,6 +259,71 @@
                 <p id="activity-category-desc" class="section-desc">查看近期活動。</p>
                 <div id="activity-list" class="activity-list"><p class="empty-history">正在載入活動⋯⋯</p></div>
             </section>
+        </div>
+
+        <!-- ===== 每日打卡 ===== -->
+        <div id="view-daily-checkin" class="view daily-checkin-view">
+            <div class="nav-bar daily-checkin-nav">
+                <button class="back-btn" type="button" onclick="window.switchView('view-challenge')">◀ 返回地圖</button>
+                <div class="top-status">
+                    <div class="top-spark-points"><span class="global-points">0</span></div>
+                </div>
+            </div>
+
+            <section class="weekly-checkin" aria-labelledby="weekly-checkin-title">
+                <div class="weekly-checkin-heading">
+                    <div>
+                        <p class="daily-eyebrow">本週進度</p>
+                        <h2 id="weekly-checkin-title">連續打卡 <span id="daily-streak-count">0</span> 天</h2>
+                    </div>
+                    <span id="daily-streak-reward" class="daily-streak-reward">再 7 天獲得 3 點</span>
+                </div>
+                <div id="daily-week-strip" class="daily-week-strip" aria-label="本週每日打卡進度"></div>
+            </section>
+
+            <section id="daily-form-panel" class="daily-form-card" aria-labelledby="daily-form-title">
+                <p class="daily-eyebrow">TODAY'S SPARK</p>
+                <h2 id="daily-form-title">今天，留一點時間給自己</h2>
+                <form id="daily-checkin-form">
+                    <fieldset class="mood-fieldset">
+                        <legend>1. 今天的心情如何？</legend>
+                        <div class="mood-options">
+                            <label class="mood-option"><input type="radio" name="daily-mood" value="happy"><span class="mood-face" aria-hidden="true">😊</span><span>開心</span></label>
+                            <label class="mood-option"><input type="radio" name="daily-mood" value="sad"><span class="mood-face" aria-hidden="true">😢</span><span>難過</span></label>
+                            <label class="mood-option"><input type="radio" name="daily-mood" value="angry"><span class="mood-face" aria-hidden="true">😠</span><span>生氣</span></label>
+                            <label class="mood-option"><input type="radio" name="daily-mood" value="calm"><span class="mood-face" aria-hidden="true">😌</span><span>平靜</span></label>
+                        </div>
+                    </fieldset>
+                    <label class="daily-note-label" for="daily-note">2. 記錄一件小事，或寫一句想對自己說的話</label>
+                    <textarea id="daily-note" maxlength="200" rows="4" placeholder="今天發生了什麼呢？" required></textarea>
+                    <div class="daily-note-footer"><span id="daily-note-count">0 / 200</span></div>
+                    <button id="daily-submit" class="main-btn daily-submit" type="submit">送出打卡</button>
+                </form>
+            </section>
+
+            <section id="daily-completed-panel" class="daily-completed-card" hidden aria-live="polite">
+                <div class="daily-completed-spark" aria-hidden="true">
+                    <svg viewBox="0 0 60 54" preserveAspectRatio="none"><path d="M29 3c.5 7-2 11-8 16C14 25 8 30 8 37c0 9 10 15 22 15s22-6 22-15c0-6-6-12-10-19-1 3-.7 6 1 8-5-3-8-6-9-11-1-4-2-8-5-12Z"/></svg>
+                </div>
+                <p class="daily-eyebrow">今日已打卡</p>
+                <h2>你為今天留下了一道小火花</h2>
+                <p id="daily-completed-summary"></p>
+                <button class="daily-history-open" type="button" onclick="window.openLatestCheckIn()">查看我的打卡紀錄</button>
+            </section>
+        </div>
+
+        <div id="daily-history-overlay" class="detail-overlay" onclick="window.closeDailyHistory()"></div>
+        <div id="daily-history" class="daily-history" role="dialog" aria-modal="true" aria-labelledby="daily-history-date" onclick="event.stopPropagation()">
+            <button class="close-btn" type="button" onclick="window.closeDailyHistory()" aria-label="關閉打卡紀錄">×</button>
+            <button id="daily-history-prev" class="daily-history-arrow daily-history-arrow--prev" type="button" onclick="window.moveDailyHistory(-1)" aria-label="查看前一天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <article id="daily-history-card" class="daily-history-card">
+                <p class="daily-eyebrow">MY DAILY SPARK</p>
+                <time id="daily-history-date"></time>
+                <div id="daily-history-mood" class="daily-history-mood"></div>
+                <blockquote id="daily-history-note"></blockquote>
+                <p id="daily-history-position" class="daily-history-position"></p>
+            </article>
+            <button id="daily-history-next" class="daily-history-arrow daily-history-arrow--next" type="button" onclick="window.moveDailyHistory(1)" aria-label="查看下一天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
         </div>
 
         <div id="activity-detail-overlay" class="detail-overlay" onclick="window.closeActivityDetail()"></div>
@@ -418,7 +507,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=29"></script>
+<script type="module" src="script.js?v=36"></script>
 
 </body>
 </html>

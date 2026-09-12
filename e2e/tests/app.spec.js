@@ -27,18 +27,65 @@ test('訪客可以進入首頁', async ({page}) => {
     await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
+test('訪客可以每日打卡並查看當日紀錄', async ({page}) => {
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.getByRole('button', {name: '查看教院生活地圖'}).click();
+    await page.getByRole('button', {name: '每日打卡'}).click();
+
+    await expect(page.locator('#view-daily-checkin')).toHaveClass(/active/);
+    await expect(page.locator('.daily-day')).toHaveCount(7);
+    await expect(page.getByText('今天，留一點時間給自己')).toBeVisible();
+
+    await page.getByText('開心', {exact: true}).click();
+    await page.locator('#daily-note').fill('完成了今天想做的事。');
+    await page.getByRole('button', {name: '送出打卡'}).click();
+
+    await expect(page.getByText('你為今天留下了一道小火花')).toBeVisible();
+    await expect(page.locator('#daily-streak-count')).toHaveText('1');
+    await expect(page.locator('.daily-day.completed')).toHaveCount(1);
+    await expect(page.locator('.global-points').first()).toHaveText('1');
+
+    await page.getByRole('button', {name: '查看我的打卡紀錄'}).click();
+    await expect(page.locator('#daily-history')).toHaveClass(/active/);
+    await expect(page.locator('#daily-history')).toBeVisible();
+    await expect(page.locator('#daily-history-card')).toBeVisible();
+    await expect(page.locator('#daily-history-mood')).toContainText('開心');
+    await expect(page.locator('#daily-history-note')).toContainText('完成了今天想做的事。');
+    await expect(page.getByRole('button', {name: '查看前一天'})).toBeHidden();
+    await expect(page.getByRole('button', {name: '查看下一天'})).toBeHidden();
+});
+
 test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
     await openApp(page);
     await page.getByRole('button', {name: '訪客遊玩'}).click();
+
+    const levelBoundaries = await page.evaluate(() => [9, 10, 24, 25, 44, 45, 69, 70]
+        .map(points => {
+            const level = window.getSparkLevel(points);
+            return [points, level.level, level.progress, level.requirement, level.completed];
+        }));
+    expect(levelBoundaries).toEqual([
+        [9, 1, 9, 10, false],
+        [10, 2, 0, 15, false],
+        [24, 2, 14, 15, false],
+        [25, 3, 0, 20, false],
+        [44, 3, 19, 20, false],
+        [45, 4, 0, 25, false],
+        [69, 4, 24, 25, false],
+        [70, 4, 25, 25, true]
+    ]);
+
     await page.evaluate(() => window.renderSparkLevel(18));
 
     await expect(page.getByRole('heading', {name: '探索火花'})).toBeVisible();
     await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv2-transparent.png');
     await expect(page.locator('#spark-level-progress')).toHaveAttribute('aria-valuenow', '8');
-    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 2（8/10）');
+    await expect(page.locator('#spark-level-progress')).toHaveAttribute('aria-valuemax', '15');
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 2（8/15）');
     await expect(page.locator('#spark-level-kicker')).toHaveCount(0);
-    expect(await page.locator('#spark-level-progress').evaluate(element =>
-        getComputedStyle(element).getPropertyValue('--spark-progress').trim())).toBe('80%');
+    expect(Number.parseFloat(await page.locator('#spark-level-progress').evaluate(element =>
+        getComputedStyle(element).getPropertyValue('--spark-progress')))).toBeCloseTo(53.33, 1);
 
     const pointIconBackgrounds = await page.evaluate(() => ({
         home: getComputedStyle(document.querySelector('.home-points-button')).backgroundImage,
@@ -46,9 +93,91 @@ test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
     }));
     expect(pointIconBackgrounds.home).toBe(pointIconBackgrounds.activity);
 
-    await page.evaluate(() => window.renderSparkLevel(30));
+    await page.evaluate(() => window.renderSparkLevel(25));
+    await expect(page.getByRole('heading', {name: '熱情火焰'})).toBeVisible();
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 3（0/20）');
+
+    await page.evaluate(() => window.renderSparkLevel(45));
     await expect(page.getByRole('heading', {name: '幻藍大火焰'})).toBeVisible();
-    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 4（已達最高等級）');
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 4（0/25）');
+
+    await page.evaluate(() => window.renderSparkLevel(70));
+    await expect(page.locator('#spark-level-progress-label')).toHaveText('LV. 4（已完成最高階段）');
+});
+
+test('首頁角色可開啟四階段角色圖鑑', async ({page}) => {
+    await openApp(page);
+    await page.getByRole('button', {name: '訪客遊玩'}).click();
+    await page.getByRole('button', {name: '開啟角色圖鑑'}).click();
+
+    const gallery = page.getByRole('dialog', {name: '初生火苗'});
+    await expect(gallery).toBeVisible();
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/10');
+    await expect(page.locator('#spark-gallery-description')).toContainText('教院初探小白');
+    await expect(page.locator('.spark-gallery-thumbnail')).toHaveCount(4);
+    await expect(page.locator('#spark-gallery-prev')).toBeDisabled();
+
+    const galleryLayout = await page.evaluate(() => {
+        const modal = document.querySelector('#spark-gallery-modal').getBoundingClientRect();
+        const heading = document.querySelector('.spark-gallery-eyebrow').getBoundingClientRect();
+        const card = document.querySelector('.spark-gallery-card').getBoundingClientRect();
+        const artwork = document.querySelector('.spark-gallery-artwork').getBoundingClientRect();
+        const previous = document.querySelector('#spark-gallery-prev').getBoundingClientRect();
+        const previousIcon = document.querySelector('#spark-gallery-prev svg').getBoundingClientRect();
+        const badge = document.querySelector('#spark-gallery-current-badge').getBoundingClientRect();
+        return {
+            headingCenter: heading.x + heading.width / 2,
+            modalCenter: modal.x + modal.width / 2,
+            arrowWidth: previous.width,
+            arrowHeight: previous.height,
+            arrowCenterY: previous.y + previous.height / 2,
+            arrowCenterX: previous.x + previous.width / 2,
+            arrowIconCenterY: previousIcon.y + previousIcon.height / 2,
+            arrowIconCenterX: previousIcon.x + previousIcon.width / 2,
+            cardCenterY: card.y + card.height / 2,
+            badgeCenter: badge.x + badge.width / 2,
+            artworkCenter: artwork.x + artwork.width / 2,
+            badgeY: badge.y,
+            artworkY: artwork.y
+        };
+    });
+    expect(galleryLayout.headingCenter).toBeCloseTo(galleryLayout.modalCenter, 1);
+    expect(galleryLayout.arrowWidth).toBeCloseTo(galleryLayout.arrowHeight, 1);
+    expect(galleryLayout.arrowCenterY).toBeCloseTo(galleryLayout.cardCenterY, 1);
+    expect(galleryLayout.arrowIconCenterX).toBeCloseTo(galleryLayout.arrowCenterX, 1);
+    expect(galleryLayout.arrowIconCenterY).toBeCloseTo(galleryLayout.arrowCenterY, 1);
+    expect(galleryLayout.badgeCenter).toBeCloseTo(galleryLayout.artworkCenter, 1);
+    expect(galleryLayout.badgeY).toBeGreaterThanOrEqual(galleryLayout.artworkY);
+
+    const evolutionArrows = await page.evaluate(() => {
+        const thumbnails = [...document.querySelectorAll('.spark-gallery-thumbnail')];
+        return {
+            active: thumbnails.slice(0, 3).map(thumbnail => {
+            const style = getComputedStyle(thumbnail, '::after');
+            return [style.content, style.borderTopColor, style.opacity];
+            }),
+            last: getComputedStyle(thumbnails[3], '::after').content
+        };
+    });
+    expect(evolutionArrows.active).toEqual([
+        ['""', 'rgb(119, 116, 109)', '1'],
+        ['""', 'rgb(119, 116, 109)', '1'],
+        ['""', 'rgb(119, 116, 109)', '1']
+    ]);
+    expect(evolutionArrows.last).toBe('none');
+
+    await page.getByRole('button', {name: '下一個等級'}).click();
+    await expect(page.locator('#spark-gallery-title')).toHaveText('探索火花');
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/15');
+
+    await page.getByRole('button', {name: '查看 LV. 4 幻藍大火焰'}).click();
+    await expect(page.locator('#spark-gallery-title')).toHaveText('幻藍大火焰');
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/25');
+    await expect(page.locator('#spark-gallery-next')).toBeDisabled();
+    await expect(page.locator('#spark-gallery-image')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -10)');
+
+    await page.keyboard.press('Escape');
+    await expect(gallery).toBeHidden();
 });
 
 test('iPhone 15 Pro 尺寸下首頁縮小並完整顯示吉祥物', async ({page}) => {
@@ -83,7 +212,7 @@ test('短螢幕桌面版完整顯示角色與首頁按鈕', async ({page}) => {
     await page.setViewportSize({width: 1280, height: 675});
     await openApp(page);
     await page.getByRole('button', {name: '訪客遊玩'}).click();
-    await page.evaluate(() => window.renderSparkLevel(20));
+    await page.evaluate(() => window.renderSparkLevel(25));
 
     const stage = page.locator('.spark-character-stage');
     const stageBox = await stage.boundingBox();

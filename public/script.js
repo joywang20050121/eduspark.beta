@@ -72,6 +72,8 @@ const callToggleWishLike = httpsCallable(functions, 'toggleWishLike');
 const callListPublishedAnnouncements = httpsCallable(functions, 'listPublishedAnnouncements');
 const callListPublicQrCampaigns = httpsCallable(functions, 'listPublicQrCampaigns');
 const callGetPointHistory = httpsCallable(functions, 'getPointHistory');
+const callGetDailyCheckIns = httpsCallable(functions, 'getDailyCheckIns');
+const callSubmitDailyCheckIn = httpsCallable(functions, 'submitDailyCheckIn');
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -86,18 +88,53 @@ window.isSuperAdmin = false;
 window.leaderboardMode = 'current';
 
 const sparkLevels = [
-    {level: 1, minimum: 0, name: '初生火苗', image: 'assets/levels/lv1-transparent.png'},
-    {level: 2, minimum: 10, name: '探索火花', image: 'assets/levels/lv2-transparent.png'},
-    {level: 3, minimum: 20, name: '熱情火焰', image: 'assets/levels/lv3-transparent.png'},
-    {level: 4, minimum: 30, name: '幻藍大火焰', image: 'assets/levels/lv4-transparent.png'}
+    {
+        level: 1,
+        minimum: 0,
+        name: '初生火苗',
+        image: 'assets/levels/lv1-transparent.png',
+        requirement: 10,
+        description: '教院初探小白，開始關注教院最近在辦的活動和展覽，在一次次嘗試中熟悉學院，慢慢找到屬於自己的小小舞台。'
+    },
+    {
+        level: 2,
+        minimum: 10,
+        name: '探索火花',
+        image: 'assets/levels/lv2-transparent.png',
+        requirement: 15,
+        description: '已經融入教院生活，開始主動參加各項活動，和朋友一起合作學習，累積經驗與自信，展現溫暖又充滿活力的一面。'
+    },
+    {
+        level: 3,
+        minimum: 25,
+        name: '熱情火焰',
+        image: 'assets/levels/lv3-transparent.png',
+        requirement: 20,
+        description: '成為教院中的可靠夥伴，勇於挑戰更高難度的任務，也願意幫助新朋友，在探索與實踐中持續突破自己的可能。'
+    },
+    {
+        level: 4,
+        minimum: 45,
+        name: '幻藍大火焰',
+        image: 'assets/levels/lv4-transparent.png',
+        requirement: 25,
+        description: '已成為教院裡閃耀的核心力量，不只是參與活動，而是用自己的熱情照亮他人，帶領夥伴一起創造更精彩的學院旅程。'
+    }
 ];
+
+let sparkGalleryIndex = 0;
+let sparkGalleryReturnFocus = null;
 
 window.getSparkLevel = (totalPoints = 0) => {
     const total = Math.max(0, Math.floor(Number(totalPoints) || 0));
-    const index = Math.min(Math.floor(total / 10), sparkLevels.length - 1);
+    let index = 0;
+    sparkLevels.forEach((candidate, candidateIndex) => {
+        if (total >= candidate.minimum) index = candidateIndex;
+    });
     const level = sparkLevels[index];
-    const progress = index === sparkLevels.length - 1 ? 10 : total - level.minimum;
-    return {...level, totalPoints: total, progress};
+    const progress = Math.min(total - level.minimum, level.requirement);
+    const completed = index === sparkLevels.length - 1 && progress >= level.requirement;
+    return {...level, totalPoints: total, progress, completed};
 };
 
 window.renderSparkLevel = (totalPoints = 0) => {
@@ -113,15 +150,90 @@ window.renderSparkLevel = (totalPoints = 0) => {
     if (name) name.textContent = level.name;
     if (progress) {
         progress.setAttribute('aria-valuenow', String(level.progress));
-        progress.setAttribute('aria-valuetext', level.level === 4 ? '已達最高等級' : `${level.progress}/10`);
-        progress.style.setProperty('--spark-progress', `${level.progress * 10}%`);
+        progress.setAttribute('aria-valuemax', String(level.requirement));
+        progress.setAttribute('aria-valuetext', level.completed ? '已完成最高階段' : `${level.progress}/${level.requirement}`);
+        progress.style.setProperty('--spark-progress', `${(level.progress / level.requirement) * 100}%`);
     }
     if (label) {
-        label.textContent = level.level === 4
-            ? 'LV. 4（已達最高等級）'
-            : `LV. ${level.level}（${level.progress}/10）`;
+        label.textContent = level.completed
+            ? 'LV. 4（已完成最高階段）'
+            : `LV. ${level.level}（${level.progress}/${level.requirement}）`;
     }
 };
+
+window.renderSparkGallery = () => {
+    const selectedLevel = sparkLevels[sparkGalleryIndex];
+    const currentLevel = window.getSparkLevel(userData?.totalPoints || userData?.points || 0);
+    const image = document.getElementById('spark-gallery-image');
+    const level = document.getElementById('spark-gallery-level');
+    const title = document.getElementById('spark-gallery-title');
+    const requirement = document.getElementById('spark-gallery-requirement');
+    const description = document.getElementById('spark-gallery-description');
+    const currentBadge = document.getElementById('spark-gallery-current-badge');
+    const previousButton = document.getElementById('spark-gallery-prev');
+    const nextButton = document.getElementById('spark-gallery-next');
+    const thumbnails = document.getElementById('spark-gallery-thumbnails');
+
+    if (image) {
+        image.src = selectedLevel.image;
+        image.alt = selectedLevel.name;
+    }
+    if (level) level.textContent = `LV. ${selectedLevel.level}`;
+    if (title) title.textContent = selectedLevel.name;
+    if (requirement) requirement.textContent = `升級點數 0/${selectedLevel.requirement}`;
+    if (description) description.textContent = selectedLevel.description;
+    if (currentBadge) currentBadge.hidden = selectedLevel.level !== currentLevel.level;
+    if (previousButton) previousButton.disabled = sparkGalleryIndex === 0;
+    if (nextButton) nextButton.disabled = sparkGalleryIndex === sparkLevels.length - 1;
+    if (thumbnails) {
+        thumbnails.innerHTML = sparkLevels.map((item, index) => `
+            <button class="spark-gallery-thumbnail${index === sparkGalleryIndex ? ' active' : ''}" type="button"
+                    onclick="window.selectSparkGallery(${index})"
+                    aria-label="查看 LV. ${item.level} ${item.name}"
+                    aria-pressed="${index === sparkGalleryIndex}">
+                <img src="${item.image}" alt="" aria-hidden="true">
+                <span>LV. ${item.level}</span>
+            </button>
+        `).join('');
+    }
+};
+
+window.openSparkGallery = (index) => {
+    const currentLevel = window.getSparkLevel(userData?.totalPoints || userData?.points || 0);
+    const requestedIndex = Number.isInteger(index) ? index : currentLevel.level - 1;
+    sparkGalleryIndex = Math.max(0, Math.min(requestedIndex, sparkLevels.length - 1));
+    sparkGalleryReturnFocus = document.activeElement;
+    window.renderSparkGallery();
+    document.getElementById('spark-gallery-overlay')?.classList.add('active');
+    document.getElementById('spark-gallery-modal')?.classList.add('active');
+    requestAnimationFrame(() => document.querySelector('.spark-gallery-close')?.focus());
+};
+
+window.closeSparkGallery = () => {
+    const modal = document.getElementById('spark-gallery-modal');
+    const wasOpen = modal?.classList.contains('active');
+    document.getElementById('spark-gallery-overlay')?.classList.remove('active');
+    modal?.classList.remove('active');
+    if (wasOpen && sparkGalleryReturnFocus instanceof HTMLElement) sparkGalleryReturnFocus.focus();
+};
+
+window.stepSparkGallery = direction => {
+    window.selectSparkGallery(sparkGalleryIndex + Number(direction || 0));
+};
+
+window.selectSparkGallery = index => {
+    const nextIndex = Math.max(0, Math.min(Number(index) || 0, sparkLevels.length - 1));
+    if (nextIndex === sparkGalleryIndex) return;
+    sparkGalleryIndex = nextIndex;
+    window.renderSparkGallery();
+};
+
+document.addEventListener('keydown', event => {
+    if (!document.getElementById('spark-gallery-modal')?.classList.contains('active')) return;
+    if (event.key === 'Escape') window.closeSparkGallery();
+    if (event.key === 'ArrowLeft') window.stepSparkGallery(-1);
+    if (event.key === 'ArrowRight') window.stepSparkGallery(1);
+});
 
 const escapeHtml = (value) => String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -793,6 +905,216 @@ window.openWishPool = () => {
     window.loadWishes();
 };
 
+const dailyMoodData = {
+    happy: {emoji: '😊', label: '開心'},
+    sad: {emoji: '😢', label: '難過'},
+    angry: {emoji: '😠', label: '生氣'},
+    calm: {emoji: '😌', label: '平靜'}
+};
+const dailyDateFormatter = new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+});
+let dailyCheckInRecords = [];
+let dailyStreak = 0;
+let dailyHistoryIndex = -1;
+
+const taipeiDateKey = (date = new Date()) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+};
+
+const shiftDateKey = (dateKey, days) => {
+    const date = new Date(`${dateKey}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+};
+
+const currentTaipeiWeek = () => {
+    const todayKey = taipeiDateKey();
+    const today = new Date(`${todayKey}T12:00:00Z`);
+    const mondayOffset = (today.getUTCDay() + 6) % 7;
+    const mondayKey = shiftDateKey(todayKey, -mondayOffset);
+    return Array.from({length: 7}, (_, index) => shiftDateKey(mondayKey, index));
+};
+
+const loadGuestDailyCheckIns = () => {
+    try {
+        const records = JSON.parse(localStorage.getItem('guest_daily_checkins') || '[]');
+        return Array.isArray(records) ? records : [];
+    } catch {
+        return [];
+    }
+};
+
+const checkInDateLabel = (dateKey) => dailyDateFormatter.format(new Date(`${dateKey}T12:00:00+08:00`));
+
+window.renderDailyCheckIn = () => {
+    const todayKey = taipeiDateKey();
+    const recordsByDate = new Map(dailyCheckInRecords.map(record => [record.dateKey, record]));
+    const weekStrip = document.getElementById('daily-week-strip');
+    if (weekStrip) {
+        const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日'];
+        weekStrip.innerHTML = currentTaipeiWeek().map((dateKey, index) => {
+            const completed = recordsByDate.has(dateKey);
+            const dayNumber = Number(dateKey.slice(-2));
+            return `<button class="daily-day${completed ? ' completed' : ''}${dateKey === todayKey ? ' today' : ''}" type="button" ${completed ? `onclick="window.openDailyHistory('${dateKey}')"` : 'disabled'} aria-label="${escapeHtml(checkInDateLabel(dateKey))}${completed ? '，已完成，查看紀錄' : '，尚未完成'}">
+                <span class="daily-day-label">週${weekdayLabels[index]}</span>
+                <span class="daily-day-spark" aria-hidden="true"><svg viewBox="0 0 60 54" preserveAspectRatio="none"><path d="M29 3c.5 7-2 11-8 16C14 25 8 30 8 37c0 9 10 15 22 15s22-6 22-15c0-6-6-12-10-19-1 3-.7 6 1 8-5-3-8-6-9-11-1-4-2-8-5-12Z"/></svg></span>
+                <span class="daily-day-date">${dayNumber}</span>
+            </button>`;
+        }).join('');
+    }
+    const streakCount = document.getElementById('daily-streak-count');
+    if (streakCount) streakCount.textContent = String(dailyStreak);
+    const daysUntilBonus = 7 - (dailyStreak % 7 || 0);
+    const reward = document.getElementById('daily-streak-reward');
+    if (reward) reward.textContent = `再 ${daysUntilBonus} 天獲得 3 點`;
+
+    const todayRecord = recordsByDate.get(todayKey);
+    const formPanel = document.getElementById('daily-form-panel');
+    const completedPanel = document.getElementById('daily-completed-panel');
+    if (formPanel) formPanel.hidden = Boolean(todayRecord);
+    if (completedPanel) completedPanel.hidden = !todayRecord;
+    const summary = document.getElementById('daily-completed-summary');
+    if (summary && todayRecord) {
+        summary.textContent = `連續第 ${todayRecord.streak} 天，今天獲得 ${todayRecord.pointsEarned} 點。`;
+    }
+};
+
+window.loadDailyCheckIns = async () => {
+    const formPanel = document.getElementById('daily-form-panel');
+    if (formPanel) formPanel.setAttribute('aria-busy', 'true');
+    try {
+        if (window.isGuestMode) {
+            dailyCheckInRecords = loadGuestDailyCheckIns().sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+            const latest = dailyCheckInRecords[0];
+            const todayKey = taipeiDateKey();
+            dailyStreak = latest && [todayKey, shiftDateKey(todayKey, -1)].includes(latest.dateKey) ? Number(latest.streak || 0) : 0;
+        } else {
+            const response = await callGetDailyCheckIns();
+            dailyCheckInRecords = Array.isArray(response.data?.records) ? response.data.records : [];
+            dailyStreak = Number(response.data?.streak || 0);
+        }
+        window.renderDailyCheckIn();
+    } catch (error) {
+        window.showToast(callableErrorMessage(error, '打卡紀錄載入失敗'));
+    } finally {
+        if (formPanel) formPanel.removeAttribute('aria-busy');
+    }
+};
+
+window.openDailyCheckIn = () => {
+    window.switchView('view-daily-checkin');
+    window.loadDailyCheckIns();
+};
+
+const showCheckInCelebration = () => {
+    const completedCard = document.getElementById('daily-completed-panel');
+    if (!completedCard) return;
+    completedCard.classList.remove('celebrating');
+    void completedCard.offsetWidth;
+    completedCard.classList.add('celebrating');
+    setTimeout(() => completedCard.classList.remove('celebrating'), 950);
+};
+
+window.submitDailyCheckIn = async (event) => {
+    event.preventDefault();
+    const mood = document.querySelector('input[name="daily-mood"]:checked')?.value;
+    const note = document.getElementById('daily-note')?.value.trim() || '';
+    if (!mood) return window.showToast('請先選擇今天的心情');
+    if (!note) return window.showToast('請留下一件小事，或一句想對自己說的話');
+    const button = document.getElementById('daily-submit');
+    if (button) button.disabled = true;
+    try {
+        let result;
+        if (window.isGuestMode) {
+            const todayKey = taipeiDateKey();
+            const records = loadGuestDailyCheckIns();
+            if (records.some(record => record.dateKey === todayKey)) throw new Error('今天已經完成打卡了');
+            const yesterday = records.find(record => record.dateKey === shiftDateKey(todayKey, -1));
+            const streak = Number(yesterday?.streak || 0) + 1;
+            const earned = streak % 7 === 0 ? 3 : 1;
+            result = {todayKey, mood, note, streak, earned};
+            records.push({dateKey: todayKey, mood, note, streak, pointsEarned: earned, createdAt: Date.now()});
+            localStorage.setItem('guest_daily_checkins', JSON.stringify(records));
+            userData.points = Number(userData.points || 0) + earned;
+            userData.totalPoints = Number(userData.totalPoints || 0) + earned;
+            localStorage.setItem('guest_user_data', JSON.stringify(userData));
+        } else {
+            result = (await callSubmitDailyCheckIn({mood, note})).data;
+            userData.points = result.points;
+            userData.totalPoints = result.totalPoints;
+        }
+        document.getElementById('daily-checkin-form')?.reset();
+        const counter = document.getElementById('daily-note-count');
+        if (counter) counter.textContent = '0 / 200';
+        window.updatePointsUI();
+        await window.loadDailyCheckIns();
+        showCheckInCelebration();
+        window.showToast(result.earned === 3 ? `連續打卡 ${result.streak} 天，獲得 3 點！` : '打卡成功，獲得 1 點！');
+    } catch (error) {
+        window.showToast(callableErrorMessage(error, error?.message || '打卡失敗'));
+    } finally {
+        if (button) button.disabled = false;
+    }
+};
+
+window.openDailyHistory = (dateKey) => {
+    const ordered = [...dailyCheckInRecords].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+    const index = ordered.findIndex(record => record.dateKey === dateKey);
+    if (index < 0) return;
+    dailyCheckInRecords = ordered;
+    dailyHistoryIndex = index;
+    window.renderDailyHistory();
+    document.getElementById('daily-history')?.classList.add('active');
+    document.getElementById('daily-history-overlay')?.classList.add('active');
+};
+
+window.openLatestCheckIn = () => {
+    const latest = [...dailyCheckInRecords].sort((a, b) => b.dateKey.localeCompare(a.dateKey))[0];
+    if (latest) window.openDailyHistory(latest.dateKey);
+};
+
+window.renderDailyHistory = () => {
+    const record = dailyCheckInRecords[dailyHistoryIndex];
+    if (!record) return;
+    const mood = dailyMoodData[record.mood] || dailyMoodData.calm;
+    document.getElementById('daily-history-date').textContent = checkInDateLabel(record.dateKey);
+    document.getElementById('daily-history-mood').innerHTML = `${mood.emoji}<span>${escapeHtml(mood.label)}</span>`;
+    document.getElementById('daily-history-note').textContent = `「${record.note}」`;
+    document.getElementById('daily-history-position').textContent = `${dailyHistoryIndex + 1} / ${dailyCheckInRecords.length}`;
+    document.getElementById('daily-history-prev').disabled = dailyHistoryIndex === 0;
+    document.getElementById('daily-history-next').disabled = dailyHistoryIndex === dailyCheckInRecords.length - 1;
+};
+
+window.moveDailyHistory = (direction) => {
+    const next = dailyHistoryIndex + direction;
+    if (next < 0 || next >= dailyCheckInRecords.length) return;
+    dailyHistoryIndex = next;
+    window.renderDailyHistory();
+};
+
+window.closeDailyHistory = () => {
+    document.getElementById('daily-history')?.classList.remove('active');
+    document.getElementById('daily-history-overlay')?.classList.remove('active');
+};
+
+document.getElementById('daily-checkin-form')?.addEventListener('submit', window.submitDailyCheckIn);
+document.getElementById('daily-note')?.addEventListener('input', event => {
+    document.getElementById('daily-note-count').textContent = `${event.target.value.length} / 200`;
+});
+let dailySwipeStartX = null;
+document.getElementById('daily-history-card')?.addEventListener('pointerdown', event => { dailySwipeStartX = event.clientX; });
+document.getElementById('daily-history-card')?.addEventListener('pointerup', event => {
+    if (dailySwipeStartX === null) return;
+    const distance = event.clientX - dailySwipeStartX;
+    dailySwipeStartX = null;
+    if (Math.abs(distance) > 45) window.moveDailyHistory(distance < 0 ? 1 : -1);
+});
+
 const activityDateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
     timeZone: 'Asia/Taipei',
     year: 'numeric',
@@ -872,10 +1194,13 @@ window.closeActivityCategory = () => {
 window.renderActivities = (campaigns) => {
     const list = document.getElementById('activity-list');
     if (!list) return;
-    if (Array.isArray(campaigns)) publicQrCampaigns = campaigns;
+    if (Array.isArray(campaigns)) {
+        publicQrCampaigns = campaigns;
+        document.getElementById('activity-category-panel').hidden = false;
+    }
     const visibleCampaigns = selectedActivityCategory
         ? publicQrCampaigns.filter(campaign => campaign.category === selectedActivityCategory)
-        : [];
+        : (Array.isArray(campaigns) ? publicQrCampaigns : []);
     list.innerHTML = visibleCampaigns.length ? visibleCampaigns.map(campaign => `
         <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
             <span class="activity-card-content">
@@ -937,6 +1262,7 @@ window.closeActivityDetail = () => {
 
 const pointHistoryTypeLabels = {
     qr: '活動兌換',
+    daily: '每日打卡',
     reward: '獎勵兌換',
     admin: '管理員調整'
 };
@@ -1825,6 +2151,8 @@ window.switchView = (viewId) => {
     document.querySelector('.view-container').scrollTop = 0;
     window.closeSocialDetail();
     window.closeActivityDetail();
+    window.closeDailyHistory();
+    window.closeSparkGallery();
     if (['view-reward', 'view-home', 'view-social'].includes(viewId)) {
         setActiveNavItem(viewId);
     }

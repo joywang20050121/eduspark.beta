@@ -913,14 +913,16 @@ button:active { transform: scale(0.97) !important; }
     place-items: center;
     height: min(31dvh, 235px);
     min-height: 178px;
+    overflow: hidden;
 }
 
 .spark-gallery-artwork > img {
-    width: calc(100% - 54px);
+    box-sizing: border-box;
+    width: 100%;
     height: 100%;
-    padding-top: 24px;
+    padding: 30px 54px 14px;
     object-fit: contain;
-    transform: translateY(-10px);
+    transform: none;
 }
 
 .spark-gallery-arrow {
@@ -976,9 +978,10 @@ button:active { transform: scale(0.97) !important; }
 }
 
 .spark-gallery-current-badge[hidden] { display: none; }
+.spark-gallery-current-badge.locked { background: #858784; color: white; }
 
 .spark-gallery-level {
-    margin-top: 2px;
+    margin: 8px 0 0;
     color: var(--color-red);
     font-size: 14px;
     font-weight: 700;
@@ -1036,13 +1039,13 @@ button:active { transform: scale(0.97) !important; }
     content: '';
     position: absolute;
     top: 50%;
-    right: -10px;
+    right: -9px;
     z-index: 2;
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     transform: translateY(-50%) rotate(45deg);
-    border-top: 3px solid #77746D;
-    border-right: 3px solid #77746D;
+    border-top: 2px solid rgba(119,116,109,.5);
+    border-right: 2px solid rgba(119,116,109,.5);
     border-radius: 1px;
     pointer-events: none;
 }
@@ -1068,7 +1071,7 @@ button:active { transform: scale(0.97) !important; }
 
 @media (max-width: 350px) {
     .spark-gallery-thumbnails { gap: 10px; }
-    .spark-gallery-thumbnail:not(:last-child)::after { right: -8px; width: 7px; height: 7px; }
+    .spark-gallery-thumbnail:not(:last-child)::after { right: -7px; width: 5px; height: 5px; }
 }
 
 /* ===== 表單 ===== */
@@ -1844,7 +1847,7 @@ button:active { transform: scale(0.97) !important; }
 .daily-form-card,
 .daily-completed-card { border: 1px solid rgba(92,118,109,.15); border-radius: 26px 26px 26px 8px; background: rgba(255,255,255,.82); box-shadow: 0 8px 24px rgba(69,82,76,.08); }
 .weekly-checkin { margin-bottom: 16px; padding: 18px 17px 15px; }
-.weekly-checkin-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
+.weekly-checkin-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 15px; padding-left: 12px; }
 .daily-eyebrow { margin: 0 0 5px; color: #8b7770; font-size: 11px; font-weight: 700; letter-spacing: .13em; }
 .weekly-checkin h2 { margin: 0; color: #38453f; font-size: 19px; }
 .daily-streak-reward { max-width: 115px; border-radius: 999px; padding: 7px 10px; background: #f8ead7; color: #9a5b44; font-size: 11px; font-weight: 700; line-height: 1.35; text-align: center; }
@@ -1873,6 +1876,18 @@ button:active { transform: scale(0.97) !important; }
 .mood-option:has(input:checked) { border-color: #c66e52; background: #fff4ed; color: #9b543f; transform: translateY(-2px); }
 .mood-option:has(input:focus-visible) { outline: 3px solid rgba(198,110,82,.3); outline-offset: 2px; }
 .mood-face { font-size: 31px; line-height: 1; }
+.daily-custom-mood-panel { margin-top: 10px; border-radius: 17px; padding: 13px; background: #f8f4ec; }
+.daily-custom-mood-panel[hidden],
+.daily-history-editor[hidden] { display: none; }
+.daily-custom-mood-title { display: block; margin-bottom: 9px; color: #59635f; font-size: 12px; font-weight: 700; }
+.daily-emoji-options { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.daily-emoji-options button { min-width: 0; border: 1px solid transparent; border-radius: 9px; padding: 5px 1px; background: white; font-size: 21px; line-height: 1.2; cursor: pointer; }
+.daily-emoji-options button:hover,
+.daily-emoji-options button:focus-visible { border-color: #c66e52; outline: none; background: #fff4ed; }
+.daily-custom-mood-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; margin-top: 10px; }
+.daily-custom-mood-fields label { color: #6c706e; font-size: 11px; font-weight: 700; }
+.daily-custom-mood-fields input { box-sizing: border-box; width: 100%; margin-top: 5px; border: 1px solid rgba(92,118,109,.25); border-radius: 10px; padding: 8px 9px; background: white; color: #343b38; font: inherit; }
+.daily-custom-mood-fields input:focus { border-color: #c66e52; outline: 2px solid rgba(198,110,82,.13); }
 #daily-note { box-sizing: border-box; width: 100%; resize: vertical; border: 1px solid rgba(92,118,109,.25); border-radius: 17px 17px 6px 17px; padding: 13px 14px; background: #fff; color: #343b38; font: inherit; line-height: 1.6; }
 #daily-note:focus { border-color: #c66e52; outline: 3px solid rgba(198,110,82,.13); }
 .daily-note-footer { margin: 5px 2px 15px; color: #939895; font-size: 11px; text-align: right; }
@@ -1889,12 +1904,25 @@ button:active { transform: scale(0.97) !important; }
 .daily-history { position: fixed; z-index: 1600; top: 50%; left: 50%; display: none; width: min(430px, calc(100% - 28px)); transform: translate(-50%, -50%); }
 .daily-history.active { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; }
 .daily-history .close-btn { position: absolute; z-index: 2; top: 9px; right: 12px; border: 0; background: none; color: #6e716f; font-size: 27px; cursor: pointer; }
-.daily-history-card { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 30px 30px 30px 9px; padding: 38px 28px 28px; background: #fffaf3; box-shadow: 0 20px 60px rgba(42,47,45,.25); text-align: center; touch-action: pan-y; }
+.daily-history-card { position: relative; min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 30px 30px 30px 9px; padding: 38px 28px 58px; background: #fffaf3; box-shadow: 0 20px 60px rgba(42,47,45,.25); text-align: center; touch-action: pan-y; }
 .daily-history-card time { color: #46524d; font-size: 20px; font-weight: 700; }
 .daily-history-mood { margin: 22px 0 13px; font-size: 62px; line-height: 1; }
 .daily-history-mood span { display: block; margin-top: 8px; color: #8b7770; font-size: 13px; font-weight: 700; }
 .daily-history-card blockquote { width: 100%; margin: 5px 0 20px; color: #414a46; font-size: 17px; line-height: 1.8; overflow-wrap: anywhere; }
-.daily-history-position { margin: auto 0 0; color: #9a9f9c; font-size: 11px; }
+.daily-history-position { position: absolute; bottom: 24px; left: 50%; margin: 0; color: #9a9f9c; font-size: 11px; transform: translateX(-50%); }
+.daily-history-actions { position: absolute; right: 20px; bottom: 15px; left: 20px; display: flex; align-items: center; justify-content: space-between; }
+.daily-history-actions button { display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; padding: 0; background: transparent; color: #8b7770; cursor: pointer; }
+.daily-history-actions button:hover,
+.daily-history-actions button:focus-visible { outline: none; background: rgba(198,110,82,.12); color: #a85842; }
+.daily-history-actions button:disabled { cursor: wait; opacity: .45; }
+.daily-history-actions svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.daily-history-editor { box-sizing: border-box; width: 100%; margin: 10px 0 18px; text-align: left; }
+.daily-history-editor label { display: block; margin-bottom: 7px; color: #6a746f; font-size: 12px; font-weight: 700; }
+.daily-history-editor textarea { box-sizing: border-box; width: 100%; resize: vertical; border: 1px solid rgba(92,118,109,.3); border-radius: 14px 14px 5px 14px; padding: 10px 11px; background: white; color: #414a46; font: inherit; line-height: 1.6; }
+.daily-history-editor textarea:focus { border-color: #c66e52; outline: 2px solid rgba(198,110,82,.13); }
+.daily-history-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.daily-history-editor-actions button { border: 1px solid #c66e52; border-radius: 999px; padding: 7px 13px; background: transparent; color: #a85842; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.daily-history-editor-actions #daily-history-save { background: #c66e52; color: white; }
 .daily-history-arrow { display: grid; width: 42px; height: 42px; place-items: center; border: 0; border-radius: 50%; padding: 0; background: #fff; color: #a85c45; cursor: pointer; box-shadow: 0 5px 16px rgba(42,47,45,.18); }
 .daily-history-arrow svg { display: block; width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .daily-history-arrow:disabled { visibility: hidden; }

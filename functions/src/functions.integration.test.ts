@@ -53,6 +53,8 @@ type TestClient = {
   getPointHistory: ReturnType<typeof httpsCallable>;
   getDailyCheckIns: ReturnType<typeof httpsCallable>;
   submitDailyCheckIn: ReturnType<typeof httpsCallable>;
+  updateDailyCheckIn: ReturnType<typeof httpsCallable>;
+  deleteDailyCheckIn: ReturnType<typeof httpsCallable>;
 };
 
 let testEnvironment: RulesTestEnvironment;
@@ -106,6 +108,8 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     getPointHistory: httpsCallable(functions, "getPointHistory"),
     getDailyCheckIns: httpsCallable(functions, "getDailyCheckIns"),
     submitDailyCheckIn: httpsCallable(functions, "submitDailyCheckIn"),
+    updateDailyCheckIn: httpsCallable(functions, "updateDailyCheckIn"),
+    deleteDailyCheckIn: httpsCallable(functions, "deleteDailyCheckIn"),
   };
   clients.push(client);
   return client;
@@ -469,6 +473,50 @@ describe("每日打卡", () => {
     const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
     assert.equal(history[0]?.delta, 1);
     assert.equal(history[0]?.type, "daily");
+  });
+
+  test("可使用自訂心情、編輯文字並刪除紀錄", async () => {
+    const client = await createClient("daily-edit-delete");
+    await client.saveProfile({realName: "心情同學", nickname: "心情", dept: "教院", bio: "", avatar: ""});
+
+    const created = (await client.submitDailyCheckIn({
+      mood: "custom",
+      moodEmoji: "🥳",
+      moodLabel: "超期待",
+      note: "原本的文字",
+    })).data as {todayKey: string; points: number; totalPoints: number};
+    assert.equal(created.points, 1);
+    assert.equal(created.totalPoints, 1);
+
+    await client.updateDailyCheckIn({dateKey: created.todayKey, note: "修改後的文字"});
+    const edited = (await client.getDailyCheckIns()).data as {
+      records: Array<{
+        dateKey: string; mood: string; moodEmoji: string; moodLabel: string; note: string;
+        streak: number; pointsEarned: number; createdAt: number | null;
+      }>;
+    };
+    assert.deepEqual(edited.records[0], {
+      mood: "custom",
+      moodEmoji: "🥳",
+      moodLabel: "超期待",
+      note: "修改後的文字",
+      dateKey: created.todayKey,
+      streak: 1,
+      pointsEarned: 1,
+      createdAt: edited.records[0].createdAt,
+    });
+
+    const deleted = (await client.deleteDailyCheckIn({dateKey: created.todayKey})).data as {
+      deleted: boolean; points: number; totalPoints: number; streak: number;
+    };
+    assert.equal(deleted.deleted, true);
+    assert.equal(deleted.points, 0);
+    assert.equal(deleted.totalPoints, 0);
+    assert.equal(deleted.streak, 0);
+    const empty = (await client.getDailyCheckIns()).data as {records: unknown[]};
+    assert.equal(empty.records.length, 0);
+    const history = (await client.getPointHistory()).data as unknown[];
+    assert.equal(history.length, 0);
   });
 
   test("連續第七天可獲得三點", async () => {

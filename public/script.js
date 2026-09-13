@@ -74,6 +74,8 @@ const callListPublicQrCampaigns = httpsCallable(functions, 'listPublicQrCampaign
 const callGetPointHistory = httpsCallable(functions, 'getPointHistory');
 const callGetDailyCheckIns = httpsCallable(functions, 'getDailyCheckIns');
 const callSubmitDailyCheckIn = httpsCallable(functions, 'submitDailyCheckIn');
+const callUpdateDailyCheckIn = httpsCallable(functions, 'updateDailyCheckIn');
+const callDeleteDailyCheckIn = httpsCallable(functions, 'deleteDailyCheckIn');
 
 // ========== 全域狀態 ==========
 let currentUser = null;
@@ -180,9 +182,15 @@ window.renderSparkGallery = () => {
     }
     if (level) level.textContent = `LV. ${selectedLevel.level}`;
     if (title) title.textContent = selectedLevel.name;
-    if (requirement) requirement.textContent = `升級點數 0/${selectedLevel.requirement}`;
+    if (requirement) requirement.textContent = `升級所需點數 0/${selectedLevel.requirement}`;
     if (description) description.textContent = selectedLevel.description;
-    if (currentBadge) currentBadge.hidden = selectedLevel.level !== currentLevel.level;
+    if (currentBadge) {
+        const isCurrent = selectedLevel.level === currentLevel.level;
+        const isLocked = selectedLevel.level > currentLevel.level;
+        currentBadge.hidden = !isCurrent && !isLocked;
+        currentBadge.textContent = isLocked ? '待解鎖' : '目前等級';
+        currentBadge.classList.toggle('locked', isLocked);
+    }
     if (previousButton) previousButton.disabled = sparkGalleryIndex === 0;
     if (nextButton) nextButton.disabled = sparkGalleryIndex === sparkLevels.length - 1;
     if (thumbnails) {
@@ -909,7 +917,8 @@ const dailyMoodData = {
     happy: {emoji: '😊', label: '開心'},
     sad: {emoji: '😢', label: '難過'},
     angry: {emoji: '😠', label: '生氣'},
-    calm: {emoji: '😌', label: '平靜'}
+    calm: {emoji: '😌', label: '平靜'},
+    custom: {emoji: '🙂', label: '自訂'}
 };
 const dailyDateFormatter = new Intl.DateTimeFormat('zh-TW', {
     timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
@@ -917,6 +926,48 @@ const dailyDateFormatter = new Intl.DateTimeFormat('zh-TW', {
 let dailyCheckInRecords = [];
 let dailyStreak = 0;
 let dailyHistoryIndex = -1;
+
+const dailyMoodForRecord = record => record?.mood === 'custom'
+    ? {
+        emoji: typeof record.moodEmoji === 'string' && record.moodEmoji ? record.moodEmoji : '🙂',
+        label: typeof record.moodLabel === 'string' && record.moodLabel ? record.moodLabel : '自訂'
+    }
+    : dailyMoodData[record?.mood] || dailyMoodData.calm;
+
+const isSingleEmoji = value => [...new Intl.Segmenter('zh-TW', {granularity: 'grapheme'}).segment(value)].length === 1 &&
+    /\p{Extended_Pictographic}/u.test(value) && !/\s/u.test(value);
+
+const resetCustomMood = () => {
+    const panel = document.getElementById('daily-custom-mood-panel');
+    const emojiInput = document.getElementById('daily-custom-emoji');
+    const labelInput = document.getElementById('daily-custom-label');
+    const face = document.getElementById('daily-custom-mood-face');
+    const label = document.getElementById('daily-custom-mood-label');
+    if (panel) panel.hidden = true;
+    if (emojiInput) emojiInput.value = '';
+    if (labelInput) labelInput.value = '';
+    if (face) face.textContent = '＋';
+    if (label) label.textContent = '自訂';
+};
+
+const renderCustomMoodChoice = () => {
+    const emoji = document.getElementById('daily-custom-emoji')?.value.trim() || '＋';
+    const labelText = document.getElementById('daily-custom-label')?.value.trim() || '自訂';
+    const face = document.getElementById('daily-custom-mood-face');
+    const label = document.getElementById('daily-custom-mood-label');
+    if (face) face.textContent = emoji;
+    if (label) label.textContent = labelText;
+};
+
+const recalculateGuestDailyRecords = records => {
+    let previousKey = null;
+    let streak = 0;
+    return [...records].sort((a, b) => a.dateKey.localeCompare(b.dateKey)).map(record => {
+        streak = previousKey && shiftDateKey(previousKey, 1) === record.dateKey ? streak + 1 : 1;
+        previousKey = record.dateKey;
+        return {...record, streak, pointsEarned: streak % 7 === 0 ? 3 : 1};
+    });
+};
 
 const taipeiDateKey = (date = new Date()) => {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -1023,8 +1074,16 @@ const showCheckInCelebration = () => {
 window.submitDailyCheckIn = async (event) => {
     event.preventDefault();
     const mood = document.querySelector('input[name="daily-mood"]:checked')?.value;
+    const moodEmoji = mood === 'custom' ? document.getElementById('daily-custom-emoji')?.value.trim() || '' : '';
+    const moodLabel = mood === 'custom' ? document.getElementById('daily-custom-label')?.value.trim() || '' : '';
     const note = document.getElementById('daily-note')?.value.trim() || '';
     if (!mood) return window.showToast('請先選擇今天的心情');
+    if (mood === 'custom' && (!moodEmoji || !isSingleEmoji(moodEmoji))) {
+        return window.showToast('請輸入一個表情符號');
+    }
+    if (mood === 'custom' && (!moodLabel || Array.from(moodLabel).length > 5)) {
+        return window.showToast('心情名稱請輸入 1 至 5 個字');
+    }
     if (!note) return window.showToast('請留下一件小事，或一句想對自己說的話');
     const button = document.getElementById('daily-submit');
     if (button) button.disabled = true;
@@ -1037,18 +1096,19 @@ window.submitDailyCheckIn = async (event) => {
             const yesterday = records.find(record => record.dateKey === shiftDateKey(todayKey, -1));
             const streak = Number(yesterday?.streak || 0) + 1;
             const earned = streak % 7 === 0 ? 3 : 1;
-            result = {todayKey, mood, note, streak, earned};
-            records.push({dateKey: todayKey, mood, note, streak, pointsEarned: earned, createdAt: Date.now()});
+            result = {todayKey, mood, moodEmoji, moodLabel, note, streak, earned};
+            records.push({dateKey: todayKey, mood, moodEmoji, moodLabel, note, streak, pointsEarned: earned, createdAt: Date.now()});
             localStorage.setItem('guest_daily_checkins', JSON.stringify(records));
             userData.points = Number(userData.points || 0) + earned;
             userData.totalPoints = Number(userData.totalPoints || 0) + earned;
             localStorage.setItem('guest_user_data', JSON.stringify(userData));
         } else {
-            result = (await callSubmitDailyCheckIn({mood, note})).data;
+            result = (await callSubmitDailyCheckIn({mood, moodEmoji, moodLabel, note})).data;
             userData.points = result.points;
             userData.totalPoints = result.totalPoints;
         }
         document.getElementById('daily-checkin-form')?.reset();
+        resetCustomMood();
         const counter = document.getElementById('daily-note-count');
         if (counter) counter.textContent = '0 / 200';
         window.updatePointsUI();
@@ -1081,13 +1141,14 @@ window.openLatestCheckIn = () => {
 window.renderDailyHistory = () => {
     const record = dailyCheckInRecords[dailyHistoryIndex];
     if (!record) return;
-    const mood = dailyMoodData[record.mood] || dailyMoodData.calm;
+    const mood = dailyMoodForRecord(record);
     document.getElementById('daily-history-date').textContent = checkInDateLabel(record.dateKey);
     document.getElementById('daily-history-mood').innerHTML = `${mood.emoji}<span>${escapeHtml(mood.label)}</span>`;
     document.getElementById('daily-history-note').textContent = `「${record.note}」`;
     document.getElementById('daily-history-position').textContent = `${dailyHistoryIndex + 1} / ${dailyCheckInRecords.length}`;
     document.getElementById('daily-history-prev').disabled = dailyHistoryIndex === 0;
     document.getElementById('daily-history-next').disabled = dailyHistoryIndex === dailyCheckInRecords.length - 1;
+    window.cancelDailyHistoryEdit();
 };
 
 window.moveDailyHistory = (direction) => {
@@ -1102,7 +1163,102 @@ window.closeDailyHistory = () => {
     document.getElementById('daily-history-overlay')?.classList.remove('active');
 };
 
+window.startDailyHistoryEdit = () => {
+    const record = dailyCheckInRecords[dailyHistoryIndex];
+    if (!record) return;
+    const editor = document.getElementById('daily-history-editor');
+    const note = document.getElementById('daily-history-note');
+    const input = document.getElementById('daily-history-edit-note');
+    if (input) input.value = record.note;
+    if (note) note.hidden = true;
+    if (editor) editor.hidden = false;
+    document.getElementById('daily-history-edit')?.setAttribute('aria-pressed', 'true');
+    input?.focus();
+};
+
+window.cancelDailyHistoryEdit = () => {
+    const editor = document.getElementById('daily-history-editor');
+    const note = document.getElementById('daily-history-note');
+    if (editor) editor.hidden = true;
+    if (note) note.hidden = false;
+    document.getElementById('daily-history-edit')?.setAttribute('aria-pressed', 'false');
+};
+
+window.saveDailyHistoryEdit = async () => {
+    const record = dailyCheckInRecords[dailyHistoryIndex];
+    const note = document.getElementById('daily-history-edit-note')?.value.trim() || '';
+    if (!record) return;
+    if (!note) return window.showToast('請留下一件小事，或一句想對自己說的話');
+    const button = document.getElementById('daily-history-save');
+    if (button) button.disabled = true;
+    try {
+        if (window.isGuestMode) {
+            const records = loadGuestDailyCheckIns().map(item => item.dateKey === record.dateKey ? {...item, note} : item);
+            localStorage.setItem('guest_daily_checkins', JSON.stringify(records));
+        } else {
+            await callUpdateDailyCheckIn({dateKey: record.dateKey, note});
+        }
+        dailyCheckInRecords[dailyHistoryIndex] = {...record, note};
+        window.renderDailyHistory();
+        window.showToast('打卡文字已更新');
+    } catch (error) {
+        window.showToast(callableErrorMessage(error, '打卡文字更新失敗'));
+    } finally {
+        if (button) button.disabled = false;
+    }
+};
+
+window.deleteDailyHistoryRecord = async () => {
+    const record = dailyCheckInRecords[dailyHistoryIndex];
+    if (!record || !window.confirm(`確定要刪除 ${checkInDateLabel(record.dateKey)} 的打卡紀錄嗎？`)) return;
+    const button = document.getElementById('daily-history-delete');
+    if (button) button.disabled = true;
+    try {
+        if (window.isGuestMode) {
+            const oldRecords = loadGuestDailyCheckIns();
+            const oldEarned = oldRecords.reduce((sum, item) => sum + Number(item.pointsEarned || 0), 0);
+            const records = recalculateGuestDailyRecords(oldRecords.filter(item => item.dateKey !== record.dateKey));
+            const newEarned = records.reduce((sum, item) => sum + Number(item.pointsEarned || 0), 0);
+            const pointDelta = newEarned - oldEarned;
+            localStorage.setItem('guest_daily_checkins', JSON.stringify(records));
+            userData.points = Math.max(0, Number(userData.points || 0) + pointDelta);
+            userData.totalPoints = Math.max(userData.points, Number(userData.totalPoints || 0) + pointDelta, 0);
+            localStorage.setItem('guest_user_data', JSON.stringify(userData));
+        } else {
+            const result = (await callDeleteDailyCheckIn({dateKey: record.dateKey})).data;
+            userData.points = result.points;
+            userData.totalPoints = result.totalPoints;
+        }
+        window.updatePointsUI();
+        await window.loadDailyCheckIns();
+        const remainingRecords = [...dailyCheckInRecords].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+        const nextRecord = remainingRecords[Math.min(dailyHistoryIndex, remainingRecords.length - 1)];
+        if (nextRecord) window.openDailyHistory(nextRecord.dateKey);
+        else window.closeDailyHistory();
+        window.showToast('打卡紀錄已刪除');
+    } catch (error) {
+        window.showToast(callableErrorMessage(error, '打卡紀錄刪除失敗'));
+    } finally {
+        if (button) button.disabled = false;
+    }
+};
+
 document.getElementById('daily-checkin-form')?.addEventListener('submit', window.submitDailyCheckIn);
+document.querySelectorAll('input[name="daily-mood"]').forEach(input => {
+    input.addEventListener('change', event => {
+        const panel = document.getElementById('daily-custom-mood-panel');
+        if (panel) panel.hidden = event.target.value !== 'custom';
+    });
+});
+document.querySelectorAll('[data-mood-emoji]').forEach(button => {
+    button.addEventListener('click', () => {
+        const input = document.getElementById('daily-custom-emoji');
+        if (input) input.value = button.dataset.moodEmoji || '';
+        renderCustomMoodChoice();
+    });
+});
+document.getElementById('daily-custom-emoji')?.addEventListener('input', renderCustomMoodChoice);
+document.getElementById('daily-custom-label')?.addEventListener('input', renderCustomMoodChoice);
 document.getElementById('daily-note')?.addEventListener('input', event => {
     document.getElementById('daily-note-count').textContent = `${event.target.value.length} / 200`;
 });

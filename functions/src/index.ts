@@ -33,7 +33,7 @@ const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").tri
 const callableOptions = {enforceAppCheck};
 const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
 const qrCampaignCategories = ["daily", "in_person", "interactive", "limited"] as const;
-const dailyMoods = ["happy", "sad", "angry", "calm"] as const;
+const dailyMoods = ["happy", "sad", "angry", "calm", "custom"] as const;
 const taipeiOffsetMillis = 8 * 60 * 60 * 1000;
 const dayMillis = 24 * 60 * 60 * 1000;
 
@@ -50,6 +50,31 @@ function dailyMood(value: unknown): typeof dailyMoods[number] {
     throw new HttpsError("invalid-argument", "請選擇今天的心情");
   }
   return value as typeof dailyMoods[number];
+}
+
+function dailyMoodDetails(data: Record<string, unknown>) {
+  const mood = dailyMood(data.mood);
+  if (mood !== "custom") return {mood, moodEmoji: "", moodLabel: ""};
+  const moodEmoji = requiredText(data.moodEmoji, "心情表情", 16);
+  const emojiSegments = [...new Intl.Segmenter("zh-TW", {granularity: "grapheme"}).segment(moodEmoji)];
+  if (emojiSegments.length !== 1 || !/\p{Extended_Pictographic}/u.test(moodEmoji) || /\s/u.test(moodEmoji)) {
+    throw new HttpsError("invalid-argument", "請輸入一個表情符號");
+  }
+  const moodLabel = requiredText(data.moodLabel, "心情名稱", 20);
+  if (Array.from(moodLabel).length > 5) {
+    throw new HttpsError("invalid-argument", "心情名稱請輸入 1 至 5 個字");
+  }
+  return {mood, moodEmoji, moodLabel};
+}
+
+function dailyCheckInDateKey(value: unknown): string {
+  const dateKey = requiredText(value, "打卡日期", 10);
+  const dateMillis = Date.parse(`${dateKey}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !Number.isFinite(dateMillis) ||
+      dateKeyFromDayNumber(Math.floor(dateMillis / dayMillis)) !== dateKey) {
+    throw new HttpsError("invalid-argument", "打卡日期格式不正確");
+  }
+  return dateKey;
 }
 
 function qrCampaignCategory(value: unknown): typeof qrCampaignCategories[number] {
@@ -1057,6 +1082,8 @@ export const getDailyCheckIns = onCall(callableOptions, async (request) => {
     return {
       dateKey: item.id,
       mood: dailyMoods.includes(data.mood) ? data.mood : "calm",
+      moodEmoji: data.mood === "custom" && typeof data.moodEmoji === "string" ? data.moodEmoji : "",
+      moodLabel: data.mood === "custom" && typeof data.moodLabel === "string" ? data.moodLabel : "",
       note: typeof data.note === "string" ? data.note : "",
       streak: Math.max(1, numberOrZero(data.streak)),
       pointsEarned: Math.max(0, numberOrZero(data.pointsEarned)),
@@ -1070,7 +1097,7 @@ export const getDailyCheckIns = onCall(callableOptions, async (request) => {
 
 export const submitDailyCheckIn = onCall(callableOptions, async (request) => {
   requireAuth(request);
-  const mood = dailyMood(request.data?.mood);
+  const {mood, moodEmoji, moodLabel} = dailyMoodDetails(request.data ?? {});
   const note = requiredText(request.data?.note, "今天的小事", 200);
   const todayNumber = taipeiDayNumber();
   const todayKey = dateKeyFromDayNumber(todayNumber);
@@ -1106,6 +1133,8 @@ export const submitDailyCheckIn = onCall(callableOptions, async (request) => {
     transaction.create(todayRef, {
       dateKey: todayKey,
       mood,
+      moodEmoji,
+      moodLabel,
       note,
       streak,
       pointsEarned: earned,
@@ -1118,7 +1147,81 @@ export const submitDailyCheckIn = onCall(callableOptions, async (request) => {
       label: streak % 7 === 0 ? `每日打卡・連續 ${streak} 天` : "每日打卡",
       createdAt: FieldValue.serverTimestamp(),
     });
-    return {todayKey, mood, note, streak, earned, points, totalPoints};
+    return {todayKey, mood, moodEmoji, moodLabel, note, streak, earned, points, totalPoints};
+  });
+});
+
+export const updateDailyCheckIn = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const dateKey = dailyCheckInDateKey(request.data?.dateKey);
+  const note = requiredText(request.data?.note, "今天的小事", 200);
+  const recordRef = db.doc(`usersPrivate/${request.auth.uid}/dailyCheckIns/${dateKey}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(recordRef);
+    if (!snapshot.exists) throw new HttpsError("not-found", "找不到這筆打卡紀錄");
+    transaction.update(recordRef, {note, updatedAt: FieldValue.serverTimestamp()});
+  });
+  return {dateKey, note};
+});
+
+export const deleteDailyCheckIn = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  const dateKey = dailyCheckInDateKey(request.data?.dateKey);
+  const uid = request.auth.uid;
+  const userRef = db.doc(`users/${uid}`);
+  const recordsQuery = db.collection(`usersPrivate/${uid}/dailyCheckIns`).orderBy("dateKey", "asc");
+
+  return db.runTransaction(async (transaction) => {
+    const [userSnapshot, recordsSnapshot] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(recordsQuery),
+    ]);
+    if (!userSnapshot.exists) throw new HttpsError("failed-precondition", "請先建立個人檔案");
+    if (!recordsSnapshot.docs.some((item) => item.id === dateKey)) {
+      throw new HttpsError("not-found", "找不到這筆打卡紀錄");
+    }
+
+    let previousDayNumber: number | null = null;
+    let streak = 0;
+    let oldEarnedTotal = 0;
+    let newEarnedTotal = 0;
+    const retainedRecords = recordsSnapshot.docs.filter((item) => item.id !== dateKey);
+    recordsSnapshot.docs.forEach((item) => {
+      oldEarnedTotal += Math.max(0, numberOrZero(item.data().pointsEarned));
+    });
+    retainedRecords.forEach((item) => {
+      const dayNumber = Math.floor(Date.parse(`${item.id}T00:00:00Z`) / dayMillis);
+      streak = previousDayNumber !== null && dayNumber === previousDayNumber + 1 ? streak + 1 : 1;
+      previousDayNumber = dayNumber;
+      const pointsEarned = streak % 7 === 0 ? 3 : 1;
+      newEarnedTotal += pointsEarned;
+      transaction.update(item.ref, {streak, pointsEarned});
+      transaction.set(db.doc(`usersPrivate/${uid}/pointLedger/daily_${item.id}`), {
+        delta: pointsEarned,
+        type: "daily",
+        sourceId: item.id,
+        label: streak % 7 === 0 ? `每日打卡・連續 ${streak} 天` : "每日打卡",
+      }, {merge: true});
+    });
+
+    const pointDelta = newEarnedTotal - oldEarnedTotal;
+    const currentPoints = numberOrZero(userSnapshot.data()?.points);
+    if (currentPoints + pointDelta < 0) {
+      throw new HttpsError("failed-precondition", "目前點數不足，無法刪除這筆打卡紀錄");
+    }
+    const currentTotal = Math.max(currentPoints, numberOrZero(userSnapshot.data()?.totalPoints));
+    const points = currentPoints + pointDelta;
+    const totalPoints = Math.max(points, currentTotal + pointDelta, 0);
+    transaction.update(userRef, {points, totalPoints, updatedAt: FieldValue.serverTimestamp()});
+    transaction.delete(db.doc(`usersPrivate/${uid}/dailyCheckIns/${dateKey}`));
+    transaction.delete(db.doc(`usersPrivate/${uid}/pointLedger/daily_${dateKey}`));
+
+    const todayNumber = taipeiDayNumber();
+    const latestRecord = retainedRecords.at(-1);
+    const latestDayNumber = latestRecord ?
+      Math.floor(Date.parse(`${latestRecord.id}T00:00:00Z`) / dayMillis) : null;
+    const activeStreak = latestDayNumber !== null && latestDayNumber >= todayNumber - 1 ? streak : 0;
+    return {dateKey, deleted: true, points, totalPoints, streak: activeStreak};
   });
 });
 

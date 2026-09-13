@@ -27,7 +27,7 @@ test('訪客可以進入首頁', async ({page}) => {
     await expect(page.getByRole('button', {name: '查看教院生活地圖'})).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
-test('訪客可以每日打卡並查看當日紀錄', async ({page}) => {
+test('訪客可以用自訂心情打卡、編輯並刪除當日紀錄', async ({page}) => {
     await openApp(page);
     await page.getByRole('button', {name: '訪客遊玩'}).click();
     await page.getByRole('button', {name: '查看教院生活地圖'}).click();
@@ -36,8 +36,23 @@ test('訪客可以每日打卡並查看當日紀錄', async ({page}) => {
     await expect(page.locator('#view-daily-checkin')).toHaveClass(/active/);
     await expect(page.locator('.daily-day')).toHaveCount(7);
     await expect(page.getByText('今天，留一點時間給自己')).toBeVisible();
+    const weeklyHeadingAlignment = await page.evaluate(() => {
+        const heading = document.querySelector('.weekly-checkin-heading > div').getBoundingClientRect();
+        const mondayText = document.createRange();
+        mondayText.selectNodeContents(document.querySelector('.daily-day-label'));
+        return {headingLeft: heading.left, mondayTextLeft: mondayText.getBoundingClientRect().left};
+    });
+    expect(weeklyHeadingAlignment.headingLeft).toBeCloseTo(weeklyHeadingAlignment.mondayTextLeft, 0);
+    await expect(page.locator('.mood-option')).toHaveCount(4);
+    await expect(page.getByText('開心', {exact: true})).toBeVisible();
+    await expect(page.getByText('難過', {exact: true})).toBeVisible();
+    await expect(page.getByText('平靜', {exact: true})).toBeVisible();
+    await expect(page.getByText('生氣', {exact: true})).toHaveCount(0);
 
-    await page.getByText('開心', {exact: true}).click();
+    await page.getByText('自訂', {exact: true}).click();
+    await expect(page.locator('#daily-custom-mood-panel')).toBeVisible();
+    await page.getByRole('button', {name: '選擇慶祝表情'}).click();
+    await page.locator('#daily-custom-label').fill('超期待');
     await page.locator('#daily-note').fill('完成了今天想做的事。');
     await page.getByRole('button', {name: '送出打卡'}).click();
 
@@ -50,10 +65,23 @@ test('訪客可以每日打卡並查看當日紀錄', async ({page}) => {
     await expect(page.locator('#daily-history')).toHaveClass(/active/);
     await expect(page.locator('#daily-history')).toBeVisible();
     await expect(page.locator('#daily-history-card')).toBeVisible();
-    await expect(page.locator('#daily-history-mood')).toContainText('開心');
+    await expect(page.locator('#daily-history-mood')).toContainText('超期待');
+    await expect(page.locator('#daily-history-mood')).toContainText('🥳');
     await expect(page.locator('#daily-history-note')).toContainText('完成了今天想做的事。');
     await expect(page.getByRole('button', {name: '查看前一天'})).toBeHidden();
     await expect(page.getByRole('button', {name: '查看下一天'})).toBeHidden();
+
+    await page.getByRole('button', {name: '編輯當日紀錄'}).click();
+    await page.locator('#daily-history-edit-note').fill('今天的文字已更新。');
+    await page.getByRole('button', {name: '儲存'}).click();
+    await expect(page.locator('#daily-history-note')).toContainText('今天的文字已更新。');
+
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '刪除當日紀錄'}).click();
+    await expect(page.locator('#daily-history')).toBeHidden();
+    await expect(page.getByText('今天，留一點時間給自己')).toBeVisible();
+    await expect(page.locator('.daily-day.completed')).toHaveCount(0);
+    await expect(page.locator('.global-points').first()).toHaveText('0');
 });
 
 test('首頁依歷史累積點數顯示角色等級', async ({page}) => {
@@ -112,7 +140,8 @@ test('首頁角色可開啟四階段角色圖鑑', async ({page}) => {
 
     const gallery = page.getByRole('dialog', {name: '初生火苗'});
     await expect(gallery).toBeVisible();
-    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/10');
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級所需點數 0/10');
+    await expect(page.locator('#spark-gallery-current-badge')).toHaveText('目前等級');
     await expect(page.locator('#spark-gallery-description')).toContainText('教院初探小白');
     await expect(page.locator('.spark-gallery-thumbnail')).toHaveCount(4);
     await expect(page.locator('#spark-gallery-prev')).toBeDisabled();
@@ -160,21 +189,30 @@ test('首頁角色可開啟四階段角色圖鑑', async ({page}) => {
         };
     });
     expect(evolutionArrows.active).toEqual([
-        ['""', 'rgb(119, 116, 109)', '1'],
-        ['""', 'rgb(119, 116, 109)', '1'],
-        ['""', 'rgb(119, 116, 109)', '1']
+        ['""', 'rgba(119, 116, 109, 0.5)', '1'],
+        ['""', 'rgba(119, 116, 109, 0.5)', '1'],
+        ['""', 'rgba(119, 116, 109, 0.5)', '1']
     ]);
     expect(evolutionArrows.last).toBe('none');
 
     await page.getByRole('button', {name: '下一個等級'}).click();
     await expect(page.locator('#spark-gallery-title')).toHaveText('探索火花');
-    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/15');
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級所需點數 0/15');
+    await expect(page.locator('#spark-gallery-current-badge')).toHaveText('待解鎖');
+
+    await page.getByRole('button', {name: '查看 LV. 3 熱情火焰'}).click();
+    const lv3Spacing = await page.evaluate(() => {
+        const artwork = document.querySelector('.spark-gallery-artwork').getBoundingClientRect();
+        const level = document.querySelector('#spark-gallery-level').getBoundingClientRect();
+        return {artworkBottom: artwork.bottom, levelTop: level.top};
+    });
+    expect(lv3Spacing.artworkBottom).toBeLessThanOrEqual(lv3Spacing.levelTop);
 
     await page.getByRole('button', {name: '查看 LV. 4 幻藍大火焰'}).click();
     await expect(page.locator('#spark-gallery-title')).toHaveText('幻藍大火焰');
-    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級點數 0/25');
+    await expect(page.locator('#spark-gallery-requirement')).toHaveText('升級所需點數 0/25');
     await expect(page.locator('#spark-gallery-next')).toBeDisabled();
-    await expect(page.locator('#spark-gallery-image')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -10)');
+    await expect(page.locator('#spark-gallery-image')).toHaveCSS('transform', 'none');
 
     await page.keyboard.press('Escape');
     await expect(gallery).toBeHidden();
@@ -223,6 +261,15 @@ test('短螢幕桌面版完整顯示角色與首頁按鈕', async ({page}) => {
     await expect(page.locator('#spark-level-image')).toHaveCSS('object-fit', 'contain');
     await expect(page.locator('#spark-level-image')).toHaveAttribute('src', 'assets/levels/lv3-transparent.png');
     expect(mapButtonBox.y + mapButtonBox.height).toBeLessThanOrEqual(navBox.y);
+
+    await page.getByRole('button', {name: '開啟角色圖鑑'}).click();
+    await page.getByRole('button', {name: '查看 LV. 3 熱情火焰'}).click();
+    const gallerySpacing = await page.evaluate(() => {
+        const artwork = document.querySelector('.spark-gallery-artwork').getBoundingClientRect();
+        const level = document.querySelector('#spark-gallery-level').getBoundingClientRect();
+        return {artworkBottom: artwork.bottom, levelTop: level.top};
+    });
+    expect(gallerySpacing.artworkBottom).toBeLessThanOrEqual(gallerySpacing.levelTop);
 });
 
 test('沒有公告時顯示敬請期待', async ({page}) => {

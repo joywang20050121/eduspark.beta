@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="/spark2.png">
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=47">
+    <link rel="stylesheet" href="style.css?v=48">
 </head>
 <body>
 
@@ -163,7 +163,7 @@
                 </button>
                 <p id="spark-gallery-level" class="spark-gallery-level">LV. 1</p>
                 <h2 id="spark-gallery-title">初生火苗</h2>
-                <p id="spark-gallery-requirement" class="spark-gallery-requirement">升級點數 0/10</p>
+                <p id="spark-gallery-requirement" class="spark-gallery-requirement">升級所需點數 0/10</p>
                 <p id="spark-gallery-description" class="spark-gallery-description"></p>
             </div>
             <div id="spark-gallery-thumbnails" class="spark-gallery-thumbnails" aria-label="選擇角色階段"></div>
@@ -290,8 +290,25 @@
                         <div class="mood-options">
                             <label class="mood-option"><input type="radio" name="daily-mood" value="happy"><span class="mood-face" aria-hidden="true">😊</span><span>開心</span></label>
                             <label class="mood-option"><input type="radio" name="daily-mood" value="sad"><span class="mood-face" aria-hidden="true">😢</span><span>難過</span></label>
-                            <label class="mood-option"><input type="radio" name="daily-mood" value="angry"><span class="mood-face" aria-hidden="true">😠</span><span>生氣</span></label>
                             <label class="mood-option"><input type="radio" name="daily-mood" value="calm"><span class="mood-face" aria-hidden="true">😌</span><span>平靜</span></label>
+                            <label class="mood-option mood-option-custom"><input type="radio" name="daily-mood" value="custom"><span id="daily-custom-mood-face" class="mood-face" aria-hidden="true">＋</span><span id="daily-custom-mood-label">自訂</span></label>
+                        </div>
+                        <div id="daily-custom-mood-panel" class="daily-custom-mood-panel" hidden>
+                            <span class="daily-custom-mood-title">選擇表情符號</span>
+                            <div class="daily-emoji-options" aria-label="常用表情符號">
+                                <button type="button" data-mood-emoji="🥰" aria-label="選擇喜愛表情">🥰</button>
+                                <button type="button" data-mood-emoji="😆" aria-label="選擇大笑表情">😆</button>
+                                <button type="button" data-mood-emoji="🥳" aria-label="選擇慶祝表情">🥳</button>
+                                <button type="button" data-mood-emoji="😴" aria-label="選擇疲倦表情">😴</button>
+                                <button type="button" data-mood-emoji="😤" aria-label="選擇生氣表情">😤</button>
+                                <button type="button" data-mood-emoji="🤔" aria-label="選擇思考表情">🤔</button>
+                                <button type="button" data-mood-emoji="🥺" aria-label="選擇委屈表情">🥺</button>
+                                <button type="button" data-mood-emoji="🤩" aria-label="選擇驚喜表情">🤩</button>
+                            </div>
+                            <div class="daily-custom-mood-fields">
+                                <label for="daily-custom-emoji">其他表情<input id="daily-custom-emoji" type="text" maxlength="16" inputmode="text" placeholder="輸入 emoji" autocomplete="off"></label>
+                                <label for="daily-custom-label">心情名稱<input id="daily-custom-label" type="text" maxlength="5" placeholder="限 5 個字" autocomplete="off"></label>
+                            </div>
                         </div>
                     </fieldset>
                     <label class="daily-note-label" for="daily-note">2. 記錄一件小事，或寫一句想對自己說的話</label>
@@ -321,7 +338,19 @@
                 <time id="daily-history-date"></time>
                 <div id="daily-history-mood" class="daily-history-mood"></div>
                 <blockquote id="daily-history-note"></blockquote>
+                <div id="daily-history-editor" class="daily-history-editor" hidden>
+                    <label for="daily-history-edit-note">編輯打卡文字</label>
+                    <textarea id="daily-history-edit-note" maxlength="200" rows="4"></textarea>
+                    <div class="daily-history-editor-actions">
+                        <button type="button" onclick="window.cancelDailyHistoryEdit()">取消</button>
+                        <button id="daily-history-save" type="button" onclick="window.saveDailyHistoryEdit()">儲存</button>
+                    </div>
+                </div>
                 <p id="daily-history-position" class="daily-history-position"></p>
+                <div class="daily-history-actions">
+                    <button id="daily-history-delete" type="button" onclick="window.deleteDailyHistoryRecord()" aria-label="刪除當日紀錄"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg></button>
+                    <button id="daily-history-edit" type="button" onclick="window.startDailyHistoryEdit()" aria-label="編輯當日紀錄"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.5-10.5a2.1 2.1 0 0 0-3-3L5.2 16 4 20Zm10.2-13 3 3"/></svg></button>
+                </div>
             </article>
             <button id="daily-history-next" class="daily-history-arrow daily-history-arrow--next" type="button" onclick="window.moveDailyHistory(1)" aria-label="查看下一天"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
         </div>
@@ -507,7 +536,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
         integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"
         crossorigin="anonymous"></script>
-<script type="module" src="script.js?v=36"></script>
+<script type="module" src="script.js?v=37"></script>
 
 </body>
 </html>

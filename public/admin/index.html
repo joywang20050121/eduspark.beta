@@ -155,7 +155,8 @@
             <form id="admin-user-search" class="admin-card admin-search-bar">
                 <div class="form-group">
                     <label for="admin-user-query">查詢使用者</label>
-                    <input id="admin-user-query" type="search" maxlength="254" autocomplete="off" placeholder="輸入 Email、姓名或暱稱">
+                    <textarea id="admin-user-query" rows="3" maxlength="5099" autocomplete="off" placeholder="輸入 Email、姓名或暱稱，每行一位"></textarea>
+                    <p class="admin-help">可用換行或逗號分隔，一次查詢最多 20 位使用者。</p>
                 </div>
                 <button id="search-admin-users" type="submit" class="admin-primary-button">查詢</button>
                 <button id="clear-admin-user-search" type="button" class="admin-secondary-button">清除</button>
@@ -274,6 +275,6 @@
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=12"></script>
+    <script type="module" src="/admin/admin.js?v=13"></script>
 </body>
 </html>

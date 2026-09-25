@@ -591,6 +591,14 @@ describe("積分管理", () => {
     assert.equal(firstUser?.realName, "甲同學");
     assert.equal(firstUser?.points, 4);
     assert.equal(firstUser?.totalPoints, 7);
+
+    const multipleUsers = (await admin.listUsers({queries: ["甲同學", "乙同學"]})).data as Array<{
+      uid: string;
+    }>;
+    assert.deepEqual(new Set(multipleUsers.map((user) => user.uid)), new Set([
+      first.auth.currentUser!.uid,
+      second.auth.currentUser!.uid,
+    ]));
   });
 
   test("一般使用者不能批次加點", async () => {

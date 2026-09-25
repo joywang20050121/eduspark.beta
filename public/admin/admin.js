@@ -485,11 +485,20 @@ window.renderAdminUsers = (users, query = "") => {
     });
 };
 
+const adminUserSearchTerms = (query) => [...new Set(String(query || "")
+    .split(/[\n,，]+/u)
+    .map((term) => term.trim())
+    .filter(Boolean))];
+
 const loadAdminUsers = async (query = document.getElementById("admin-user-query")?.value.trim() || "") => {
     const list = document.getElementById("admin-user-list");
     list.innerHTML = '<p class="empty-history">正在載入使用者⋯⋯</p>';
     try {
-        const response = await callListUsers({query});
+        const queries = adminUserSearchTerms(query);
+        if (queries.length > 20) {
+            throw new Error("一次最多查詢 20 位使用者");
+        }
+        const response = await callListUsers({queries});
         window.renderAdminUsers(response.data, query);
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "管理員列表載入失敗"))}</p>`;

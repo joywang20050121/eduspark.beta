@@ -969,7 +969,16 @@ export const listAdminUsers = onCall(callableOptions, async (request) => {
 
 export const listUsers = onCall(callableOptions, async (request) => {
   requireAdmin(request);
-  const searchText = optionalText(request.data?.query, "查詢文字", 254).toLocaleLowerCase("zh-TW");
+  const rawQueries = request.data?.queries;
+  if (rawQueries !== undefined && !Array.isArray(rawQueries)) {
+    throw new HttpsError("invalid-argument", "查詢條件格式不正確");
+  }
+  if (Array.isArray(rawQueries) && rawQueries.length > 20) {
+    throw new HttpsError("invalid-argument", "一次最多查詢 20 位使用者");
+  }
+  const searchTexts = [...new Set((Array.isArray(rawQueries) ? rawQueries : [request.data?.query])
+    .map((value) => optionalText(value, "查詢文字", 254).toLocaleLowerCase("zh-TW"))
+    .filter(Boolean))];
   const users: Array<ReturnType<typeof adminUserSummary> & PublicProfile & {
     realName: string;
     createdAt: number | null;
@@ -995,7 +1004,7 @@ export const listUsers = onCall(callableOptions, async (request) => {
           user.metadata.creationTime ? Date.parse(user.metadata.creationTime) : null;
         const searchable = [summary.email, summary.displayName, profile.nickname, realName]
           .join("\n").toLocaleLowerCase("zh-TW");
-        if (!searchText || searchable.includes(searchText)) {
+        if (!searchTexts.length || searchTexts.some((searchText) => searchable.includes(searchText))) {
           users.push({
             ...summary,
             ...profile,
@@ -1012,7 +1021,7 @@ export const listUsers = onCall(callableOptions, async (request) => {
 
   return users
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || a.email.localeCompare(b.email))
-    .slice(0, 10);
+    .slice(0, searchTexts.length ? 100 : 10);
 });
 
 export const batchAddPoints = onCall(callableOptions, async (request) => {

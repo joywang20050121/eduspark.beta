@@ -663,7 +663,7 @@ test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({pag
         }]);
     });
 
-    await expect(page.locator('#admin-user-query')).toHaveAttribute('placeholder', '輸入 Email、姓名或暱稱');
+    await expect(page.locator('#admin-user-query')).toHaveAttribute('placeholder', '輸入 Email、姓名或暱稱，每行一位');
     await expect(page.locator('.admin-user-row')).toHaveCount(1);
     await page.locator('.admin-user-row-content').hover();
     await expect(page.locator('.admin-user-row-content')).toHaveCSS('transform', 'none');

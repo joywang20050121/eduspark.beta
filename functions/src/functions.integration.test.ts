@@ -459,12 +459,23 @@ describe("每日打卡", () => {
 
     const state = (await client.getDailyCheckIns()).data as {
       streak: number;
-      records: Array<{dateKey: string; mood: string; note: string; streak: number; pointsEarned: number; createdAt: number | null}>;
+      records: Array<{
+        dateKey: string;
+        mood: string;
+        moodEmoji: string;
+        moodLabel: string;
+        note: string;
+        streak: number;
+        pointsEarned: number;
+        createdAt: number | null;
+      }>;
     };
     assert.equal(state.streak, 1);
     assert.deepEqual(state.records[0], {
       dateKey: first.todayKey,
       mood: "happy",
+      moodEmoji: "",
+      moodLabel: "",
       note: "完成了今天想做的事。",
       streak: 1,
       pointsEarned: 1,

@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "node scripts/run-tests.mjs"
+  },
   "dependencies": {
     "firebase": "^12.18.0"
   }

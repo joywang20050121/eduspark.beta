@@ -71,6 +71,7 @@ const callListAnnouncements = httpsCallable(functions, "listAnnouncements");
 const callSaveAnnouncement = httpsCallable(functions, "saveAnnouncement");
 const callDeleteAnnouncement = httpsCallable(functions, "deleteAnnouncement");
 const callBatchAddPoints = httpsCallable(functions, "batchAddPoints");
+const callGetUserPointHistory = httpsCallable(functions, "getUserPointHistory");
 
 const loading = document.getElementById("admin-loading");
 const login = document.getElementById("admin-login");
@@ -80,8 +81,11 @@ let editingCampaignId = null;
 let selectedAdminUser = null;
 let authorizationInProgress = false;
 let adminUsers = [];
+let adminUserPage = 1;
+let adminUserTotalPages = 1;
 let adminWishes = [];
 const selectedPointUserIds = new Set();
+const announcementContentMaxLength = 1100;
 let toastTimeout;
 
 const escapeHtml = (value) => String(value ?? "")
@@ -454,9 +458,19 @@ const setSelectedAdminRole = async (admin) => {
     }
 };
 
-window.renderAdminUsers = (users, query = "") => {
+window.renderAdminUsers = (result, query = "") => {
     const list = document.getElementById("admin-user-list");
-    adminUsers = Array.isArray(users) ? users : [];
+    const response = Array.isArray(result)
+        ? {users: result, total: result.length, page: 1, totalPages: 1}
+        : (result || {});
+    adminUsers = Array.isArray(response.users) ? response.users : [];
+    adminUserPage = Number(response.page) || 1;
+    adminUserTotalPages = Math.max(1, Number(response.totalPages) || 1);
+    const pagination = document.getElementById("admin-user-pagination");
+    pagination.hidden = Number(response.total) === 0;
+    document.getElementById("admin-user-page-summary").textContent = `第 ${adminUserPage}／${adminUserTotalPages} 頁，共 ${Number(response.total) || 0} 位使用者`;
+    document.getElementById("previous-admin-user-page").disabled = adminUserPage <= 1;
+    document.getElementById("next-admin-user-page").disabled = adminUserPage >= adminUserTotalPages;
     selectedPointUserIds.clear();
     updateSelectedUserCount();
     list.innerHTML = adminUsers.length ? adminUsers.map((user) => `
@@ -490,7 +504,7 @@ const adminUserSearchTerms = (query) => [...new Set(String(query || "")
     .map((term) => term.trim())
     .filter(Boolean))];
 
-const loadAdminUsers = async (query = document.getElementById("admin-user-query")?.value.trim() || "") => {
+const loadAdminUsers = async (query = document.getElementById("admin-user-query")?.value.trim() || "", page = adminUserPage) => {
     const list = document.getElementById("admin-user-list");
     list.innerHTML = '<p class="empty-history">正在載入使用者⋯⋯</p>';
     try {
@@ -498,7 +512,7 @@ const loadAdminUsers = async (query = document.getElementById("admin-user-query"
         if (queries.length > 20) {
             throw new Error("一次最多查詢 20 位使用者");
         }
-        const response = await callListUsers({queries});
+        const response = await callListUsers({queries, page});
         window.renderAdminUsers(response.data, query);
     } catch (error) {
         list.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "管理員列表載入失敗"))}</p>`;
@@ -513,7 +527,7 @@ const updateSelectedUserCount = () => {
     document.getElementById("open-point-adjustment").disabled = selectedPointUserIds.size === 0;
 };
 
-const showUserDetail = (uid) => {
+const showUserDetail = async (uid) => {
     const user = adminUsers.find((item) => item.uid === uid);
     if (!user) return;
     selectedAdminUser = user;
@@ -530,12 +544,30 @@ const showUserDetail = (uid) => {
             <div><dt>自我介紹</dt><dd>${escapeHtml(user.bio || "—")}</dd></div>
             <div><dt>最近登入</dt><dd>${escapeHtml(formatCampaignTime(user.lastSignInAt))}</dd></div>
         </dl>
+        <section class="admin-point-history" aria-labelledby="admin-point-history-title">
+            <h3 id="admin-point-history-title">點數歷史紀錄</h3>
+            <div id="admin-point-history-list" class="admin-point-history-list"><p class="empty-history">正在載入紀錄⋯⋯</p></div>
+        </section>
         <div class="admin-detail-actions">
             <button id="change-selected-role" class="admin-secondary-button" ${user.isSuperAdmin || user.disabled ? "disabled" : ""}>${user.isAdmin ? "撤銷管理員" : "設為管理員"}</button>
         </div></div>`;
     detail.querySelector("[data-close-modal]").addEventListener("click", () => closeAdminModal("admin-user-detail-modal"));
     detail.querySelector("#change-selected-role")?.addEventListener("click", () => setSelectedAdminRole(!user.isAdmin));
     openAdminModal("admin-user-detail-modal");
+    const historyList = detail.querySelector("#admin-point-history-list");
+    try {
+        const history = (await callGetUserPointHistory({userId: uid})).data;
+        historyList.innerHTML = Array.isArray(history) && history.length ? history.map((item) => {
+            const delta = Number(item.delta) || 0;
+            return `<div class="admin-point-history-item">
+                <strong>${escapeHtml(item.label || "積分異動")}</strong>
+                <time>${escapeHtml(formatCampaignTime(item.createdAt))}</time>
+                <span class="admin-point-history-delta ${delta >= 0 ? "positive" : "negative"}">${delta > 0 ? "+" : ""}${delta} 點</span>
+            </div>`;
+        }).join("") : '<p class="empty-history">目前沒有點數紀錄。</p>';
+    } catch (error) {
+        historyList.innerHTML = `<p class="empty-history">${escapeHtml(callableErrorMessage(error, "點數紀錄載入失敗"))}</p>`;
+    }
 };
 
 document.getElementById("batch-add-points").addEventListener("click", async (event) => {
@@ -561,12 +593,20 @@ document.getElementById("batch-add-points").addEventListener("click", async (eve
 
 document.getElementById("admin-user-search").addEventListener("submit", (event) => {
     event.preventDefault();
-    loadAdminUsers(document.getElementById("admin-user-query").value.trim());
+    loadAdminUsers(document.getElementById("admin-user-query").value.trim(), 1);
 });
 
 document.getElementById("clear-admin-user-search").addEventListener("click", () => {
     document.getElementById("admin-user-query").value = "";
-    loadAdminUsers("");
+    loadAdminUsers("", 1);
+});
+
+document.getElementById("previous-admin-user-page").addEventListener("click", () => {
+    if (adminUserPage > 1) loadAdminUsers(undefined, adminUserPage - 1);
+});
+
+document.getElementById("next-admin-user-page").addEventListener("click", () => {
+    if (adminUserPage < adminUserTotalPages) loadAdminUsers(undefined, adminUserPage + 1);
 });
 
 document.getElementById("open-point-adjustment").addEventListener("click", () => {
@@ -702,6 +742,10 @@ document.getElementById("save-announcement").addEventListener("click", async (ev
     const published = document.getElementById("announcement-published").checked;
     if (!title || !content) {
         showToast("請填寫公告標題與內容");
+        return;
+    }
+    if (Array.from(content).length > announcementContentMaxLength) {
+        showToast(`公告內容不可超過 ${announcementContentMaxLength} 字`);
         return;
     }
     const button = event.currentTarget;

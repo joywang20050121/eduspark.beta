@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css?v=33">
-    <link rel="stylesheet" href="/admin/admin.css?v=9">
+    <link rel="stylesheet" href="/admin/admin.css?v=10">
 </head>
 <body class="admin-page">
     <div id="toast" role="status" aria-live="polite">提示訊息</div>
@@ -167,6 +167,11 @@
                 </div>
                 <div id="admin-user-list"><p class="empty-history">正在載入使用者⋯⋯</p></div>
             </div>
+            <nav id="admin-user-pagination" class="admin-pagination" aria-label="使用者列表分頁" hidden>
+                <button id="previous-admin-user-page" type="button" class="admin-pagination-button" aria-label="上一頁">‹</button>
+                <span id="admin-user-page-summary">第 1／1 頁</span>
+                <button id="next-admin-user-page" type="button" class="admin-pagination-button" aria-label="下一頁">›</button>
+            </nav>
             <p id="selected-user-count" class="admin-help admin-selection-summary">已選擇 0 位使用者</p>
         </section>
 
@@ -262,6 +267,7 @@
                             <button type="button" data-command="removeFormat">清除格式</button>
                         </div>
                         <div id="announcement-content" class="wysiwyg-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="輸入要顯示在 App 公佈欄的內容"></div>
+                        <p class="admin-help">最多 1100 字。</p>
                     </div>
                     <label class="admin-check-option">
                         <input id="announcement-published" type="checkbox" checked>
@@ -275,6 +281,6 @@
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=13"></script>
+    <script type="module" src="/admin/admin.js?v=15"></script>
 </body>
 </html>

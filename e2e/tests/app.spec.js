@@ -646,7 +646,7 @@ test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({pag
         document.querySelector('#admin-login').hidden = true;
         document.querySelector('#admin-dashboard').hidden = false;
         document.querySelector('#admin-users').hidden = false;
-        window.renderAdminUsers([{
+        window.renderAdminUsers({users: [{
             uid: 'user-one',
             email: 'student@example.com',
             displayName: '王同學',
@@ -660,11 +660,14 @@ test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({pag
             isSuperAdmin: false,
             disabled: false,
             lastSignInAt: Date.now()
-        }]);
+        }], total: 21, page: 1, pageSize: 10, totalPages: 3});
     });
 
     await expect(page.locator('#admin-user-query')).toHaveAttribute('placeholder', '輸入 Email、姓名或暱稱，每行一位');
     await expect(page.locator('.admin-user-row')).toHaveCount(1);
+    await expect(page.locator('#admin-user-page-summary')).toHaveText('第 1／3 頁，共 21 位使用者');
+    await expect(page.locator('#previous-admin-user-page')).toBeDisabled();
+    await expect(page.locator('#next-admin-user-page')).toBeEnabled();
     await page.locator('.admin-user-row-content').hover();
     await expect(page.locator('.admin-user-row-content')).toHaveCSS('transform', 'none');
     await expect(page.locator('.point-user-checkbox')).toBeVisible();

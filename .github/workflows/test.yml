@@ -45,20 +45,8 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium
 
-      - name: Check Functions types
-        run: npm --prefix functions run check
-
-      - name: Build Functions
-        run: npm --prefix functions run build
-
-      - name: Run emulator and browser tests
-        run: >-
-          ./functions/node_modules/.bin/firebase emulators:exec
-          --project demo-eduspark
-          --only auth,functions,firestore,hosting
-          "npm --prefix functions run test:functions:run &&
-          npm --prefix functions test &&
-          npm --prefix e2e test"
+      - name: Run test suite
+        run: npm test
 
       - name: Upload Playwright report
         if: failure()
@@ -147,7 +135,7 @@ jobs:
           ./functions/node_modules/.bin/firebase deploy
           --project coespark-a3f6e
           --only
-          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getDailyCheckIns,functions:submitDailyCheckIn,functions:getPointHistory,functions:setAdminRole
+          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getDailyCheckIns,functions:submitDailyCheckIn,functions:getPointHistory,functions:getUserPointHistory,functions:setAdminRole
           --non-interactive
 
       - name: Verify production site

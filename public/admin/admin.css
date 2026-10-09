@@ -332,6 +332,10 @@
 .admin-user-email { color: #596963; font-size: 13px; }
 .admin-row-arrow { color: #8a928f; font-size: 25px; }
 .admin-selection-summary { margin: 10px 4px 0; }
+.admin-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; color: #596963; font-size: 14px; }
+.admin-pagination[hidden] { display: none; }
+.admin-pagination-button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(38,51,47,.18); border-radius: 50%; padding: 0; background: #fff; color: var(--admin-ink); font-size: 24px; line-height: 1; cursor: pointer; }
+.admin-pagination-button:disabled { opacity: .38; cursor: default; }
 .admin-inline-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .admin-inline-heading h3 { margin: 0; }
 .admin-inline-heading select { width: auto; min-width: 130px; }
@@ -341,6 +345,15 @@
 .user-detail-grid dt { margin-bottom: 5px; color: #75807c; font-size: 12px; }
 .user-detail-grid dd { margin: 0; overflow-wrap: anywhere; line-height: 1.6; }
 .admin-detail-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.admin-point-history { margin-top: 22px; }
+.admin-point-history h3 { margin: 0 0 10px; }
+.admin-point-history-list { display: grid; gap: 8px; }
+.admin-point-history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; border-radius: 12px; padding: 11px 14px; background: rgba(244,240,230,.75); }
+.admin-point-history-item strong { font-size: 15px; }
+.admin-point-history-item time { grid-column: 1; color: #75807c; font-size: 12px; }
+.admin-point-history-delta { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 800; }
+.admin-point-history-delta.positive { color: #25724e; }
+.admin-point-history-delta.negative { color: #b34b42; }
 
 .wysiwyg-toolbar { display: flex; flex-wrap: wrap; gap: 6px; border: 1px solid #ccc; border-bottom: 0; border-radius: 10px 10px 0 0; padding: 8px; background: #f8f6ef; }
 .wysiwyg-toolbar button { border: 1px solid rgba(38,51,47,.16); border-radius: 7px; padding: 6px 9px; background: #fff; color: var(--admin-ink); cursor: pointer; }

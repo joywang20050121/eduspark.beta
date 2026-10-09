@@ -34,6 +34,7 @@ const callableOptions = {enforceAppCheck};
 const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
 const qrCampaignCategories = ["daily", "in_person", "interactive", "limited"] as const;
 const dailyMoods = ["happy", "sad", "angry", "calm", "custom"] as const;
+const announcementContentMaxLength = 1100;
 const taipeiOffsetMillis = 8 * 60 * 60 * 1000;
 const dayMillis = 24 * 60 * 60 * 1000;
 
@@ -209,6 +210,9 @@ function sanitizeAnnouncementHtml(value: unknown): string {
   const textContent = sanitizeHtml(sanitized, {allowedTags: [], allowedAttributes: {}}).trim();
   if (!textContent && !/<img\b/i.test(sanitized)) {
     throw new HttpsError("invalid-argument", "公告內容不能為空白");
+  }
+  if (Array.from(textContent).length > announcementContentMaxLength) {
+    throw new HttpsError("invalid-argument", `公告內容不可超過 ${announcementContentMaxLength} 字`);
   }
   return sanitized;
 }
@@ -969,6 +973,11 @@ export const listAdminUsers = onCall(callableOptions, async (request) => {
 
 export const listUsers = onCall(callableOptions, async (request) => {
   requireAdmin(request);
+  const pageNumber = Number(request.data?.page ?? 1);
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+    throw new HttpsError("invalid-argument", "頁碼格式不正確");
+  }
+  const pageSize = 10;
   const rawQueries = request.data?.queries;
   if (rawQueries !== undefined && !Array.isArray(rawQueries)) {
     throw new HttpsError("invalid-argument", "查詢條件格式不正確");
@@ -985,7 +994,6 @@ export const listUsers = onCall(callableOptions, async (request) => {
     lastSignInAt: number | null;
   }> = [];
   let pageToken: string | undefined;
-  let pagesRead = 0;
 
   do {
     const page = await adminAuth.listUsers(1000, pageToken);
@@ -1016,12 +1024,20 @@ export const listUsers = onCall(callableOptions, async (request) => {
       });
     }
     pageToken = page.pageToken;
-    pagesRead += 1;
-  } while (pageToken && pagesRead < 10);
+  } while (pageToken);
 
-  return users
-    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || a.email.localeCompare(b.email))
-    .slice(0, searchTexts.length ? 100 : 10);
+  const sortedUsers = users
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || a.email.localeCompare(b.email));
+  const total = sortedUsers.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const offset = (pageNumber - 1) * pageSize;
+  return {
+    users: sortedUsers.slice(offset, offset + pageSize),
+    total,
+    page: pageNumber,
+    pageSize,
+    totalPages,
+  };
 });
 
 export const batchAddPoints = onCall(callableOptions, async (request) => {
@@ -1234,9 +1250,8 @@ export const deleteDailyCheckIn = onCall(callableOptions, async (request) => {
   });
 });
 
-export const getPointHistory = onCall(callableOptions, async (request) => {
-  requireAuth(request);
-  const snapshot = await db.collection(`usersPrivate/${request.auth.uid}/pointLedger`)
+async function pointHistory(uid: string) {
+  const snapshot = await db.collection(`usersPrivate/${uid}/pointLedger`)
     .orderBy("createdAt", "desc").limit(100).get();
   return snapshot.docs.map((item) => {
     const data = item.data();
@@ -1248,6 +1263,17 @@ export const getPointHistory = onCall(callableOptions, async (request) => {
       createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : null,
     };
   });
+}
+
+export const getPointHistory = onCall(callableOptions, async (request) => {
+  requireAuth(request);
+  return pointHistory(request.auth.uid);
+});
+
+export const getUserPointHistory = onCall(callableOptions, async (request) => {
+  requireAdmin(request);
+  const userId = requiredText(request.data?.userId, "使用者代碼", 128);
+  return pointHistory(userId);
 });
 
 export const setAdminRole = onCall(callableOptions, async (request) => {

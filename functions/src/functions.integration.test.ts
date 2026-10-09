@@ -51,6 +51,7 @@ type TestClient = {
   deleteAnnouncement: ReturnType<typeof httpsCallable>;
   batchAddPoints: ReturnType<typeof httpsCallable>;
   getPointHistory: ReturnType<typeof httpsCallable>;
+  getUserPointHistory: ReturnType<typeof httpsCallable>;
   getDailyCheckIns: ReturnType<typeof httpsCallable>;
   submitDailyCheckIn: ReturnType<typeof httpsCallable>;
   updateDailyCheckIn: ReturnType<typeof httpsCallable>;
@@ -106,6 +107,7 @@ async function createClient(name: string, isAdmin = false, isSuperAdmin = false)
     deleteAnnouncement: httpsCallable(functions, "deleteAnnouncement"),
     batchAddPoints: httpsCallable(functions, "batchAddPoints"),
     getPointHistory: httpsCallable(functions, "getPointHistory"),
+    getUserPointHistory: httpsCallable(functions, "getUserPointHistory"),
     getDailyCheckIns: httpsCallable(functions, "getDailyCheckIns"),
     submitDailyCheckIn: httpsCallable(functions, "submitDailyCheckIn"),
     updateDailyCheckIn: httpsCallable(functions, "updateDailyCheckIn"),
@@ -323,6 +325,21 @@ describe("公佈欄", () => {
     assert.match(publishedHtml, /alt="活動照片"/);
     assert.match(publishedHtml, /loading="lazy"/);
     assert.doesNotMatch(publishedHtml, /script|onerror/);
+
+    await admin.saveAnnouncement({
+      id,
+      title: "字數上限測試",
+      content: "字".repeat(1100),
+      category: "general",
+      published: false,
+    });
+    await assert.rejects(() => admin.saveAnnouncement({
+      id,
+      title: "超過字數上限",
+      content: "字".repeat(1101),
+      category: "general",
+      published: false,
+    }), (error: {code?: string}) => error.code === "functions/invalid-argument");
 
     await admin.saveAnnouncement({
       id,
@@ -584,6 +601,11 @@ describe("積分管理", () => {
     const adjustedHistory = (await first.getPointHistory()).data as Array<{delta: number; label: string}>;
     assert.equal(adjustedHistory[0]?.delta, -3);
     assert.equal(adjustedHistory[0]?.label, "修正重複加點");
+    const adminHistory = (await admin.getUserPointHistory({
+      userId: first.auth.currentUser!.uid,
+    })).data as Array<{delta: number; label: string}>;
+    assert.equal(adminHistory[0]?.delta, -3);
+    assert.equal(adminHistory[1]?.delta, 7);
 
     await assert.rejects(() => admin.batchAddPoints({
       userIds: [second.auth.currentUser!.uid],
@@ -591,22 +613,26 @@ describe("積分管理", () => {
       reason: "不應扣成負數",
     }), (error: {code?: string}) => error.code === "functions/failed-precondition");
 
-    const users = (await admin.listUsers({query: "甲同學"})).data as Array<{
-      uid: string;
-      realName: string;
-      points: number;
-      totalPoints: number;
-    }>;
-    assert.equal(users.length, 1);
+    const userPage = (await admin.listUsers({query: "甲同學"})).data as {
+      users: Array<{uid: string; realName: string; points: number; totalPoints: number}>;
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    };
+    assert.equal(userPage.users.length, 1);
+    assert.equal(userPage.total, 1);
+    assert.equal(userPage.pageSize, 10);
+    const users = userPage.users;
     const firstUser = users.find((user) => user.uid === first.auth.currentUser!.uid);
     assert.equal(firstUser?.realName, "甲同學");
     assert.equal(firstUser?.points, 4);
     assert.equal(firstUser?.totalPoints, 7);
 
-    const multipleUsers = (await admin.listUsers({queries: ["甲同學", "乙同學"]})).data as Array<{
-      uid: string;
-    }>;
-    assert.deepEqual(new Set(multipleUsers.map((user) => user.uid)), new Set([
+    const multipleUsers = (await admin.listUsers({queries: ["甲同學", "乙同學"]})).data as {
+      users: Array<{uid: string}>;
+    };
+    assert.deepEqual(new Set(multipleUsers.users.map((user) => user.uid)), new Set([
       first.auth.currentUser!.uid,
       second.auth.currentUser!.uid,
     ]));
@@ -618,6 +644,9 @@ describe("積分管理", () => {
       userIds: [user.auth.currentUser!.uid],
       points: 10,
       reason: "不應成功",
+    }), (error: {code?: string}) => error.code === "functions/permission-denied");
+    await assert.rejects(() => user.getUserPointHistory({
+      userId: user.auth.currentUser!.uid,
     }), (error: {code?: string}) => error.code === "functions/permission-denied");
   });
 });
@@ -656,7 +685,7 @@ describe("管理員權限管理", () => {
     });
     assert.equal((result.data as {isAdmin: boolean}).isAdmin, true);
     const users = await admin.listUsers();
-    assert.ok((users.data as Array<{email: string}>).some((user) =>
+    assert.ok((users.data as {users: Array<{email: string}>}).users.some((user) =>
       user.email === target.auth.currentUser!.email));
   });
 

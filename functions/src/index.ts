@@ -7,8 +7,8 @@ import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import QRCode from "qrcode";
 import sanitizeHtml from "sanitize-html";
 import {
+  nonZeroInteger,
   optionalText,
-  positiveInteger,
   requiredPreservedText,
   requiredText,
   timestampMillis,
@@ -706,7 +706,7 @@ export const redeemQr = onCall(callableOptions, async (request) => {
     if (!campaignSnapshot.exists) throw new HttpsError("not-found", "找不到這個 QR code");
     if (!userSnapshot.exists) throw new HttpsError("failed-precondition", "請先建立個人檔案");
     if (redemptionSnapshot.exists) {
-      throw new HttpsError("already-exists", "你已領取過這個活動的點數");
+      throw new HttpsError("already-exists", "你已使用過這個活動 QR code");
     }
 
     const campaign = campaignSnapshot.data()!;
@@ -722,11 +722,16 @@ export const redeemQr = onCall(callableOptions, async (request) => {
       throw new HttpsError("deadline-exceeded", "這個 QR code 已過期");
     }
 
-    const pointsToAdd = positiveInteger(campaign.points, "活動點數", 100);
+    const pointDelta = nonZeroInteger(campaign.points, "活動點數", 100);
     const currentPoints = numberOrZero(userSnapshot.data()?.points);
     const currentTotal = Math.max(currentPoints, numberOrZero(userSnapshot.data()?.totalPoints));
-    const newPoints = currentPoints + pointsToAdd;
-    const newTotal = currentTotal + pointsToAdd;
+    if (currentPoints + pointDelta < 0) {
+      throw new HttpsError("failed-precondition", "目前點數不足，無法完成扣點", {
+        shortage: Math.abs(pointDelta) - currentPoints,
+      });
+    }
+    const newPoints = currentPoints + pointDelta;
+    const newTotal = pointDelta > 0 ? currentTotal + pointDelta : currentTotal;
     transaction.update(userRef, {
       points: newPoints,
       totalPoints: newTotal,
@@ -736,11 +741,11 @@ export const redeemQr = onCall(callableOptions, async (request) => {
       campaignId,
       uid: request.auth.uid,
       title: campaign.title,
-      points: pointsToAdd,
+      points: pointDelta,
       redeemedAt: FieldValue.serverTimestamp(),
     });
     transaction.create(ledgerRef, {
-      delta: pointsToAdd,
+      delta: pointDelta,
       type: "qr",
       sourceId: campaignId,
       label: campaign.title,
@@ -749,7 +754,7 @@ export const redeemQr = onCall(callableOptions, async (request) => {
     transaction.update(campaignRef, {
       redemptionCount: FieldValue.increment(1),
     });
-    return {points: newPoints, totalPoints: newTotal, earned: pointsToAdd, title: campaign.title};
+    return {points: newPoints, totalPoints: newTotal, delta: pointDelta, title: campaign.title};
   });
 
   return result;
@@ -786,7 +791,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
   const title = requiredText(request.data?.title, "活動名稱", 80);
   const category = qrCampaignCategory(request.data?.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
-  const points = positiveInteger(request.data?.points, "活動點數", 100);
+  const points = nonZeroInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
   if (endsAtMillis <= startsAtMillis) {
@@ -816,7 +821,7 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
   const title = requiredText(request.data?.title, "活動名稱", 80);
   const requestedCategory = request.data?.category === undefined ? null : qrCampaignCategory(request.data.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
-  const points = positiveInteger(request.data?.points, "活動點數", 100);
+  const points = nonZeroInteger(request.data?.points, "活動點數", 100);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
   if (endsAtMillis <= startsAtMillis) {

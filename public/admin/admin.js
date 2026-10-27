@@ -355,7 +355,7 @@ window.renderAdminCampaigns = (campaigns = []) => {
                 </div>
                 <div class="campaign-meta">
                     <span class="campaign-category-tag">${escapeHtml(campaignCategoryLabels[campaign.category] || "實體活動")}</span>
-                    ${Number(campaign.points)} 點<br>
+                    ${Number(campaign.points) < 0 ? `扣除 ${Math.abs(Number(campaign.points))}` : `增加 ${Number(campaign.points)}`} 點<br>
                     ${escapeHtml(formatCampaignTime(campaign.startsAt))}～${escapeHtml(formatCampaignTime(campaign.endsAt))}
                 </div>
                 <p class="admin-wish-message">${escapeHtml(campaign.description || "尚無活動內文")}</p>
@@ -405,7 +405,8 @@ document.getElementById("save-campaign").addEventListener("click", async (event)
     const points = Number(document.getElementById("admin-campaign-points").value);
     const startsAt = new Date(document.getElementById("admin-campaign-start").value).getTime();
     const endsAt = new Date(document.getElementById("admin-campaign-end").value).getTime();
-    if (!title || !category || !description.trim() || !Number.isInteger(points) || !startsAt || !endsAt) {
+    if (!title || !category || !description.trim() || !Number.isInteger(points) || points === 0 ||
+        Math.abs(points) > 100 || !startsAt || !endsAt) {
         showToast("請完整填寫活動名稱、類別、內文、點數與時間");
         return;
     }

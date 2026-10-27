@@ -455,7 +455,8 @@ test('積分歷史紀錄依來源顯示標籤', async ({page}) => {
         document.querySelector('#view-point-history').classList.add('active');
         window.renderPointHistory([
             {label: '迎新交流會', type: 'qr', delta: 5, createdAt: Date.now()},
-            {label: '協助活動場佈', type: 'admin', delta: 3, createdAt: Date.now()}
+            {label: '協助活動場佈', type: 'admin', delta: 3, createdAt: Date.now()},
+            {label: '兌換紀念品', type: 'reward', delta: -10, createdAt: Date.now()}
         ]);
     });
 
@@ -463,6 +464,10 @@ test('積分歷史紀錄依來源顯示標籤', async ({page}) => {
     await expect(history.locator('.point-history-item').first()).toHaveCSS('border-radius', '26px 26px 26px 8px');
     await expect(history.getByText('活動兌換', {exact: true})).toBeVisible();
     await expect(history.getByText('管理員調整', {exact: true})).toBeVisible();
+    const deduction = history.locator('.point-history-item.deduction');
+    await expect(deduction).toContainText('-10');
+    await expect(deduction).toHaveCSS('border-left-color', 'rgb(180, 93, 80)');
+    await expect(deduction.locator('.point-delta')).toHaveCSS('color', 'rgb(163, 63, 53)');
 });
 
 test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
@@ -488,6 +493,15 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
             startsAt: Date.now() - 60_000,
             endsAt: Date.now() + 60_000,
             redeemed: false
+        }, {
+            id: 'deduction-campaign',
+            title: '活動報名保證金',
+            category: 'in_person',
+            description: '測試扣點活動',
+            points: -4,
+            startsAt: Date.now() - 60_000,
+            endsAt: Date.now() + 60_000,
+            redeemed: false
         }]);
     });
 
@@ -500,6 +514,10 @@ test('已兌換活動顯示淺綠色狀態與勾選圖示', async ({page}) => {
     const available = page.locator('[data-activity-id="available-campaign"]');
     await expect(available).not.toHaveClass(/redeemed/);
     await expect(available).toContainText('完成可獲得 3 點');
+    const deduction = page.locator('[data-activity-id="deduction-campaign"]');
+    await expect(deduction).toHaveClass(/deduction/);
+    await expect(deduction).toContainText('掃描將扣除 4 點');
+    await expect(deduction.locator('.activity-card-points')).toHaveCSS('color', 'rgb(163, 63, 53)');
     await page.evaluate(() => window.openActivityCategory('interactive'));
     await expect(redeemed).toHaveCount(0);
     await expect(page.locator('[data-activity-id="available-campaign"]')).toContainText('互動展覽');
@@ -603,6 +621,8 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     await expect(campaignDialog.locator('#admin-campaign-category option')).toHaveText([
         '請選擇活動類別', '每日打卡', '實體活動', '互動展覽', '限定活動'
     ]);
+    await expect(campaignDialog.locator('#admin-campaign-points')).toHaveAttribute('min', '-100');
+    await expect(campaignDialog).toContainText('正數為加點，負數為扣點；不可輸入 0。');
     await campaignDialog.getByRole('button', {name: '關閉', exact: true}).click();
     await expect(page.locator('#download-qr')).toHaveText('下載 PNG');
     await expect(page.locator('#admin-wish-filter')).toHaveCSS('min-width', '118px');

@@ -179,6 +179,43 @@ describe("QR code 交易", () => {
     assert.equal(profile.data()?.points, 3);
     assert.equal(profile.data()?.totalPoints, 3);
   });
+
+  test("扣點 QR code 會檢查餘額且不降低歷史累積點數", async () => {
+    const client = await createClient("qr-deduction");
+    const uid = client.auth.currentUser!.uid;
+    await client.saveProfile({realName: "扣點測試", nickname: "扣點", dept: "教院", bio: "", avatar: ""});
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${uid}`), {points: 20, totalPoints: 20}, {merge: true});
+    });
+
+    const deductionCampaignId = "c".repeat(36);
+    await seedCampaign(deductionCampaignId, -5);
+    const deducted = (await client.redeemQr({campaignId: deductionCampaignId})).data as {
+      points: number;
+      totalPoints: number;
+      delta: number;
+    };
+    assert.deepEqual(deducted, {
+      points: 15,
+      totalPoints: 20,
+      delta: -5,
+      title: "整合測試活動",
+    });
+    const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
+    assert.equal(history[0]?.delta, -5);
+    assert.equal(history[0]?.type, "qr");
+
+    const insufficientCampaignId = "d".repeat(36);
+    await seedCampaign(insufficientCampaignId, -16);
+    await assert.rejects(
+      () => client.redeemQr({campaignId: insufficientCampaignId}),
+      (error: {code?: string}) => error.code === "functions/failed-precondition",
+    );
+    const database = testEnvironment.authenticatedContext(uid).firestore();
+    const profile = await assertSucceeds(getDoc(doc(database, `users/${uid}`)));
+    assert.equal(profile.data()?.points, 15);
+    assert.equal(profile.data()?.totalPoints, 20);
+  });
 });
 
 describe("獎勵兌換交易", () => {
@@ -368,6 +405,28 @@ describe("管理員 QR code 管理", () => {
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
     }), (error: {code?: string}) => error.code === "functions/permission-denied");
+  });
+
+  test("管理員可以建立扣點 QR code，但不能建立零點活動", async () => {
+    const admin = await createClient("deduction-campaign-admin", true);
+    const created = await admin.createQrCampaign({
+      title: "活動報名保證金",
+      category: "in_person",
+      description: "掃描後扣除活動保證金",
+      points: -6,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    });
+    assert.equal((created.data as {points: number}).points, -6);
+
+    await assert.rejects(() => admin.createQrCampaign({
+      title: "零點活動",
+      category: "in_person",
+      description: "不應建立",
+      points: 0,
+      startsAt: Date.now() - 60_000,
+      endsAt: Date.now() + 60_000,
+    }), (error: {code?: string}) => error.code === "functions/invalid-argument");
   });
 
   test("管理員可以建立、編輯、查詢並停用活動", async () => {

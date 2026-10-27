@@ -40,6 +40,17 @@ export function positiveInteger(value: unknown, field: string, max: number): num
   return value;
 }
 
+export function nonZeroInteger(value: unknown, field: string, maxAbsolute: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value === 0 ||
+      Math.abs(value) > maxAbsolute) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field}必須是 -${maxAbsolute} 到 ${maxAbsolute} 之間的非零整數`,
+    );
+  }
+  return value;
+}
+
 export function timestampMillis(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new HttpsError("invalid-argument", `${field}格式不正確`);

@@ -520,7 +520,7 @@ const callableErrorMessage = (error, fallback = '操作失敗，請稍後再試'
     const code = callableErrorCode(error);
     if (code === 'unauthenticated') return '請先登入帳號';
     if (code === 'permission-denied') return '你沒有執行這項操作的權限';
-    if (code === 'already-exists') return '你已領取過這個活動的點數';
+    if (code === 'already-exists') return '你已使用過這個活動 QR code';
     if (code === 'not-found') return error?.message || '找不到指定資料';
     if (code === 'deadline-exceeded') return '這個 QR code 已過期';
     if (code === 'unavailable') return '目前無法連上伺服器，請檢查網路後再試';
@@ -1306,6 +1306,11 @@ const activityCategoryLabels = {
     interactive: '互動展覽',
     limited: '限定活動'
 };
+const campaignPointText = (points, redeemed = false) => {
+    const amount = Number(points) || 0;
+    if (amount < 0) return `${redeemed ? '已扣除' : '掃描將扣除'} ${Math.abs(amount)} 點`;
+    return `${redeemed ? '已獲得' : '完成可獲得'} ${amount} 點`;
+};
 const activityMapCategories = {
     daily: {title: '每日打卡', description: '每天來看看，完成打卡累積小火花。'},
     limited: {title: '限定活動', description: '期間限定的特別企劃都在這裡。'},
@@ -1358,12 +1363,12 @@ window.renderActivities = (campaigns) => {
         ? publicQrCampaigns.filter(campaign => campaign.category === selectedActivityCategory)
         : (Array.isArray(campaigns) ? publicQrCampaigns : []);
     list.innerHTML = visibleCampaigns.length ? visibleCampaigns.map(campaign => `
-        <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
+        <button class="activity-card${campaign.redeemed ? ' redeemed' : ''}${Number(campaign.points) < 0 ? ' deduction' : ''}" type="button" data-activity-id="${escapeHtml(campaign.id)}">
             <span class="activity-card-content">
                 <span class="activity-category-tag activity-category--${escapeHtml(campaign.category || 'in_person')}">${escapeHtml(activityCategoryLabels[campaign.category] || '實體活動')}</span>
                 <span class="activity-card-title">${escapeHtml(campaign.title)}</span>
                 <span>${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</span>
-                <span class="activity-card-points">${campaign.redeemed ? '已獲得' : '完成可獲得'} ${Number(campaign.points)} 點</span>
+                <span class="activity-card-points">${campaignPointText(campaign.points, campaign.redeemed)}</span>
             </span>
             ${campaign.redeemed ? `
                 <span class="activity-redeemed-check" aria-label="已兌換" title="已兌換">
@@ -1406,7 +1411,7 @@ window.openActivityDetail = (campaign) => {
             <p class="activity-detail-time">${escapeHtml(formatActivityRange(campaign.startsAt, campaign.endsAt))}</p>
         </header>
         <div class="activity-detail-description">${escapeHtml(campaign.description || '尚無活動說明')}</div>
-        <p class="activity-card-points activity-detail-points">完成可獲得 ${Number(campaign.points)} 點</p>`;
+        <p class="activity-card-points activity-detail-points">${campaignPointText(campaign.points, campaign.redeemed)}</p>`;
     document.getElementById('activity-detail').classList.add('active');
     document.getElementById('activity-detail-overlay').classList.add('active');
 };
@@ -1429,8 +1434,9 @@ window.renderPointHistory = (history) => {
     list.innerHTML = history.length ? history.map(item => {
         const type = Object.hasOwn(pointHistoryTypeLabels, item.type) ? item.type : 'other';
         const typeLabel = pointHistoryTypeLabels[type] || '積分異動';
+        const isDeduction = Number(item.delta) < 0;
         return `
-            <article class="point-history-item">
+            <article class="point-history-item${isDeduction ? ' deduction' : ''}">
                 <div>
                     <span class="point-history-title-row">
                         <strong>${escapeHtml(item.label)}</strong>
@@ -1438,7 +1444,7 @@ window.renderPointHistory = (history) => {
                     </span>
                     <time>${escapeHtml(formatWishTime(item.createdAt))}</time>
                 </div>
-                <span class="point-delta ${Number(item.delta) >= 0 ? 'positive' : 'negative'}">${Number(item.delta) >= 0 ? '+' : ''}${Number(item.delta)}</span>
+                <span class="point-delta ${isDeduction ? 'negative' : 'positive'}">${isDeduction ? '' : '+'}${Number(item.delta)}</span>
             </article>`;
     }).join('') : '<p class="empty-history">目前還沒有積分異動紀錄。</p>';
 };
@@ -1911,14 +1917,16 @@ window.redeemQrCampaign = async (campaignId) => {
     qrRedemptionInProgress = true;
     window.stopQrCamera();
     setScannerRestartVisible(false);
-    setScannerStatus('正在確認活動與領取資格⋯⋯');
+    setScannerStatus('正在確認活動與點數⋯⋯');
     try {
         const response = await callRedeemQr({campaignId: normalizedId});
         userData.points = response.data.points;
         userData.totalPoints = response.data.totalPoints;
         window.updatePointsUI();
-        setScannerStatus(`成功完成「${response.data.title}」，獲得 ${response.data.earned} 點！`);
-        window.showToast(`獲得 ${response.data.earned} 點！`);
+        const delta = Number(response.data.delta) || 0;
+        const resultText = delta < 0 ? `扣除 ${Math.abs(delta)} 點` : `獲得 ${delta} 點`;
+        setScannerStatus(`成功完成「${response.data.title}」，${resultText}！`);
+        window.showToast(`${resultText}！`);
         const url = new URL(window.location.href);
         url.searchParams.delete('redeem');
         window.history.replaceState({}, '', url);
@@ -1928,7 +1936,7 @@ window.redeemQrCampaign = async (campaignId) => {
         }, 1600);
     } catch (error) {
         console.error('QR code 兌換失敗：', error);
-        const message = callableErrorMessage(error, '無法領取活動點數');
+        const message = callableErrorMessage(error, '無法完成活動點數異動');
         setScannerStatus(message);
         window.showToast(message);
         setScannerRestartVisible(true);

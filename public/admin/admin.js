@@ -193,6 +193,8 @@ const resetCampaignForm = () => {
     document.getElementById("admin-campaign-title").value = "";
     document.getElementById("admin-campaign-category").value = "";
     document.getElementById("admin-campaign-description").value = "";
+    document.getElementById("admin-campaign-mode").value = "earn_once";
+    document.getElementById("admin-campaign-mode").disabled = false;
     document.getElementById("admin-campaign-points").value = "2";
     document.getElementById("admin-campaign-points").disabled = false;
     document.getElementById("campaign-points-lock-note").hidden = true;
@@ -210,7 +212,10 @@ const openCampaignEditor = async (campaignId) => {
         document.getElementById("admin-campaign-title").value = campaign.title || "";
         document.getElementById("admin-campaign-category").value = campaign.category || "in_person";
         document.getElementById("admin-campaign-description").value = campaign.description || "";
-        document.getElementById("admin-campaign-points").value = String(campaign.points || 1);
+        document.getElementById("admin-campaign-mode").value = campaign.redemptionMode ||
+            (Number(campaign.points) < 0 ? "deduct_repeatable" : "earn_once");
+        document.getElementById("admin-campaign-mode").disabled = campaign.hasRedemptions === true;
+        document.getElementById("admin-campaign-points").value = String(Math.abs(Number(campaign.points)) || 1);
         document.getElementById("admin-campaign-points").disabled = campaign.hasRedemptions === true;
         document.getElementById("campaign-points-lock-note").hidden = campaign.hasRedemptions !== true;
         document.getElementById("admin-campaign-start").value = toLocalDateTimeInput(new Date(campaign.startsAt));
@@ -355,6 +360,7 @@ window.renderAdminCampaigns = (campaigns = []) => {
                 </div>
                 <div class="campaign-meta">
                     <span class="campaign-category-tag">${escapeHtml(campaignCategoryLabels[campaign.category] || "實體活動")}</span>
+                    ${campaign.redemptionMode === "deduct_repeatable" || Number(campaign.points) < 0 ? "可重複扣點" : "一次性加點"}・
                     ${Number(campaign.points) < 0 ? `扣除 ${Math.abs(Number(campaign.points))}` : `增加 ${Number(campaign.points)}`} 點<br>
                     ${escapeHtml(formatCampaignTime(campaign.startsAt))}～${escapeHtml(formatCampaignTime(campaign.endsAt))}
                 </div>
@@ -402,11 +408,13 @@ document.getElementById("save-campaign").addEventListener("click", async (event)
     const title = document.getElementById("admin-campaign-title").value.trim();
     const category = document.getElementById("admin-campaign-category").value;
     const description = document.getElementById("admin-campaign-description").value;
-    const points = Number(document.getElementById("admin-campaign-points").value);
+    const redemptionMode = document.getElementById("admin-campaign-mode").value;
+    const pointAmount = Number(document.getElementById("admin-campaign-points").value);
+    const points = redemptionMode === "deduct_repeatable" ? -pointAmount : pointAmount;
     const startsAt = new Date(document.getElementById("admin-campaign-start").value).getTime();
     const endsAt = new Date(document.getElementById("admin-campaign-end").value).getTime();
-    if (!title || !category || !description.trim() || !Number.isInteger(points) || points === 0 ||
-        Math.abs(points) > 100 || !startsAt || !endsAt) {
+    if (!title || !category || !description.trim() || !["earn_once", "deduct_repeatable"].includes(redemptionMode) ||
+        !Number.isInteger(pointAmount) || pointAmount < 1 || pointAmount > 100 || !startsAt || !endsAt) {
         showToast("請完整填寫活動名稱、類別、內文、點數與時間");
         return;
     }
@@ -414,8 +422,8 @@ document.getElementById("save-campaign").addEventListener("click", async (event)
     button.disabled = true;
     try {
         const response = editingCampaignId
-            ? await callUpdateQrCampaign({campaignId: editingCampaignId, title, category, description, points, startsAt, endsAt})
-            : await callCreateQrCampaign({title, category, description, points, startsAt, endsAt});
+            ? await callUpdateQrCampaign({campaignId: editingCampaignId, title, category, description, points, redemptionMode, startsAt, endsAt})
+            : await callCreateQrCampaign({title, category, description, points, redemptionMode, startsAt, endsAt});
         const wasEditing = Boolean(editingCampaignId);
         closeAdminModal("campaign-form-modal");
         if (!wasEditing) showQrPreview(response.data);

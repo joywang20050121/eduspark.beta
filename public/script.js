@@ -1867,6 +1867,7 @@ let qrMediaStream = null;
 let qrAnimationFrame = null;
 let qrLastFrameAt = 0;
 let qrRedemptionInProgress = false;
+const pendingQrDeductionRequests = new Map();
 
 const setScannerStatus = (message) => {
     const status = document.getElementById('scanner-status');
@@ -1918,8 +1919,40 @@ window.redeemQrCampaign = async (campaignId) => {
     window.stopQrCamera();
     setScannerRestartVisible(false);
     setScannerStatus('正在確認活動與點數⋯⋯');
+    let deductionRequestId = null;
     try {
-        const response = await callRedeemQr({campaignId: normalizedId});
+        let campaign = publicQrCampaigns.find(item => item.id === normalizedId);
+        if (!campaign) {
+            const previewResponse = await callListPublicQrCampaigns();
+            publicQrCampaigns = Array.isArray(previewResponse.data) ? previewResponse.data : [];
+            campaign = publicQrCampaigns.find(item => item.id === normalizedId);
+        }
+        if (!campaign) throw new Error('找不到這個可使用的 QR code');
+
+        const pointDelta = Number(campaign.points) || 0;
+        if (pointDelta < 0) {
+            const currentPoints = Number(userData?.points || 0);
+            const cost = Math.abs(pointDelta);
+            if (currentPoints < cost) {
+                throw new Error(`目前點數不足，還差 ${cost - currentPoints} 點`);
+            }
+            const confirmed = window.confirm(
+                `${campaign.title}\n\n將扣除 ${cost} 點\n目前 ${currentPoints} 點，扣除後剩餘 ${currentPoints - cost} 點。\n\n確定要扣點嗎？`,
+            );
+            if (!confirmed) {
+                setScannerStatus('已取消扣點。');
+                setScannerRestartVisible(true);
+                return;
+            }
+            deductionRequestId = pendingQrDeductionRequests.get(normalizedId) || crypto.randomUUID();
+            pendingQrDeductionRequests.set(normalizedId, deductionRequestId);
+        }
+
+        const response = await callRedeemQr({
+            campaignId: normalizedId,
+            ...(deductionRequestId ? {requestId: deductionRequestId} : {}),
+        });
+        if (deductionRequestId) pendingQrDeductionRequests.delete(normalizedId);
         userData.points = response.data.points;
         userData.totalPoints = response.data.totalPoints;
         window.updatePointsUI();
@@ -1936,6 +1969,10 @@ window.redeemQrCampaign = async (campaignId) => {
         }, 1600);
     } catch (error) {
         console.error('QR code 兌換失敗：', error);
+        const code = callableErrorCode(error);
+        if (deductionRequestId && !['internal', 'unknown', 'unavailable'].includes(code)) {
+            pendingQrDeductionRequests.delete(normalizedId);
+        }
         const message = callableErrorMessage(error, '無法完成活動點數異動');
         setScannerStatus(message);
         window.showToast(message);

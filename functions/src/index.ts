@@ -33,6 +33,8 @@ const initialSuperAdminEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || "").tri
 const callableOptions = {enforceAppCheck};
 const wishCategories = ["suggestion", "feedback", "curiosity", "other"] as const;
 const qrCampaignCategories = ["daily", "in_person", "interactive", "limited"] as const;
+const qrRedemptionModes = ["earn_once", "deduct_repeatable"] as const;
+const repeatDeductionCooldownMillis = 5000;
 const dailyMoods = ["happy", "sad", "angry", "calm", "custom"] as const;
 const announcementContentMaxLength = 1100;
 const taipeiOffsetMillis = 8 * 60 * 60 * 1000;
@@ -90,6 +92,25 @@ function qrCampaignCategory(value: unknown): typeof qrCampaignCategories[number]
 function storedQrCampaignCategory(value: unknown): typeof qrCampaignCategories[number] {
   return qrCampaignCategories.includes(value as typeof qrCampaignCategories[number]) ?
     value as typeof qrCampaignCategories[number] : "in_person";
+}
+
+function qrRedemptionMode(value: unknown, points: number): typeof qrRedemptionModes[number] {
+  const inferred = points < 0 ? "deduct_repeatable" : "earn_once";
+  if (value === undefined || value === null || value === "") return inferred;
+  if (!qrRedemptionModes.includes(value as typeof qrRedemptionModes[number])) {
+    throw new HttpsError("invalid-argument", "QR code 使用方式不存在");
+  }
+  const mode = value as typeof qrRedemptionModes[number];
+  if ((mode === "earn_once" && points < 0) || (mode === "deduct_repeatable" && points > 0)) {
+    throw new HttpsError("invalid-argument", "QR code 使用方式與點數不一致");
+  }
+  return mode;
+}
+
+function storedQrRedemptionMode(value: unknown, points: unknown): typeof qrRedemptionModes[number] {
+  const numericPoints = numberOrZero(points);
+  return qrRedemptionModes.includes(value as typeof qrRedemptionModes[number]) ?
+    value as typeof qrRedemptionModes[number] : numericPoints < 0 ? "deduct_repeatable" : "earn_once";
 }
 
 function wishLikeActorId(request: CallableRequest<{visitorId?: unknown}>, required: boolean) {
@@ -692,24 +713,52 @@ export const redeemQr = onCall(callableOptions, async (request) => {
     throw new HttpsError("invalid-argument", "QR code 格式不正確");
   }
 
+  const suppliedRequestId = optionalText(request.data?.requestId, "交易編號", 64);
   const campaignRef = db.doc(`qrCampaigns/${campaignId}`);
   const userRef = db.doc(`users/${request.auth.uid}`);
-  const redemptionRef = db.doc(`qrRedemptions/${campaignId}_${request.auth.uid}`);
-  const ledgerRef = db.doc(`usersPrivate/${request.auth.uid}/pointLedger/qr_${campaignId}`);
 
   const result = await db.runTransaction(async (transaction) => {
-    const [campaignSnapshot, userSnapshot, redemptionSnapshot] = await Promise.all([
+    const [campaignSnapshot, userSnapshot] = await Promise.all([
       transaction.get(campaignRef),
       transaction.get(userRef),
-      transaction.get(redemptionRef),
     ]);
     if (!campaignSnapshot.exists) throw new HttpsError("not-found", "找不到這個 QR code");
     if (!userSnapshot.exists) throw new HttpsError("failed-precondition", "請先建立個人檔案");
-    if (redemptionSnapshot.exists) {
-      throw new HttpsError("already-exists", "你已使用過這個活動 QR code");
-    }
 
     const campaign = campaignSnapshot.data()!;
+    const pointDelta = nonZeroInteger(campaign.points, "活動點數", 100);
+    const redemptionMode = storedQrRedemptionMode(campaign.redemptionMode, pointDelta);
+    if (redemptionMode === "deduct_repeatable" &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(suppliedRequestId)) {
+      throw new HttpsError("invalid-argument", "扣點交易編號格式不正確");
+    }
+    const redemptionId = redemptionMode === "earn_once" ?
+      `${campaignId}_${request.auth.uid}` : `${campaignId}_${request.auth.uid}_${suppliedRequestId}`;
+    const ledgerId = redemptionMode === "earn_once" ?
+      `qr_${campaignId}` : `qr_${campaignId}_${suppliedRequestId}`;
+    const redemptionRef = db.doc(`qrRedemptions/${redemptionId}`);
+    const ledgerRef = db.doc(`usersPrivate/${request.auth.uid}/pointLedger/${ledgerId}`);
+    const stateRef = db.doc(`usersPrivate/${request.auth.uid}/qrCampaignState/${campaignId}`);
+    const [redemptionSnapshot, stateSnapshot] = await Promise.all([
+      transaction.get(redemptionRef),
+      redemptionMode === "deduct_repeatable" ? transaction.get(stateRef) : Promise.resolve(null),
+    ]);
+    if (redemptionSnapshot.exists) {
+      if (redemptionMode === "earn_once") {
+        throw new HttpsError("already-exists", "你已使用過這個活動 QR code");
+      }
+      const currentPoints = numberOrZero(userSnapshot.data()?.points);
+      const currentTotal = Math.max(currentPoints, numberOrZero(userSnapshot.data()?.totalPoints));
+      return {
+        points: currentPoints,
+        totalPoints: currentTotal,
+        delta: pointDelta,
+        title: campaign.title,
+        replayed: true,
+      };
+    }
+
     const now = Timestamp.now();
     if (campaign.active !== true) throw new HttpsError("failed-precondition", "這個 QR code 已停用");
     if (!(campaign.startsAt instanceof Timestamp) || !(campaign.endsAt instanceof Timestamp)) {
@@ -722,7 +771,11 @@ export const redeemQr = onCall(callableOptions, async (request) => {
       throw new HttpsError("deadline-exceeded", "這個 QR code 已過期");
     }
 
-    const pointDelta = nonZeroInteger(campaign.points, "活動點數", 100);
+    const lastUsedAt = stateSnapshot?.data()?.lastUsedAt;
+    if (lastUsedAt instanceof Timestamp &&
+        now.toMillis() - lastUsedAt.toMillis() < repeatDeductionCooldownMillis) {
+      throw new HttpsError("failed-precondition", "請稍候 5 秒再使用同一張扣點 QR code");
+    }
     const currentPoints = numberOrZero(userSnapshot.data()?.points);
     const currentTotal = Math.max(currentPoints, numberOrZero(userSnapshot.data()?.totalPoints));
     if (currentPoints + pointDelta < 0) {
@@ -742,6 +795,10 @@ export const redeemQr = onCall(callableOptions, async (request) => {
       uid: request.auth.uid,
       title: campaign.title,
       points: pointDelta,
+      redemptionMode,
+      requestId: redemptionMode === "deduct_repeatable" ? suppliedRequestId : null,
+      resultingPoints: newPoints,
+      resultingTotalPoints: newTotal,
       redeemedAt: FieldValue.serverTimestamp(),
     });
     transaction.create(ledgerRef, {
@@ -754,7 +811,19 @@ export const redeemQr = onCall(callableOptions, async (request) => {
     transaction.update(campaignRef, {
       redemptionCount: FieldValue.increment(1),
     });
-    return {points: newPoints, totalPoints: newTotal, delta: pointDelta, title: campaign.title};
+    if (redemptionMode === "deduct_repeatable") {
+      transaction.set(stateRef, {
+        lastUsedAt: now,
+        lastRequestId: suppliedRequestId,
+      }, {merge: true});
+    }
+    return {
+      points: newPoints,
+      totalPoints: newTotal,
+      delta: pointDelta,
+      title: campaign.title,
+      replayed: false,
+    };
   });
 
   return result;
@@ -792,6 +861,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
   const category = qrCampaignCategory(request.data?.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = nonZeroInteger(request.data?.points, "活動點數", 100);
+  const redemptionMode = qrRedemptionMode(request.data?.redemptionMode, points);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
   if (endsAtMillis <= startsAtMillis) {
@@ -804,6 +874,7 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
     category,
     description,
     points,
+    redemptionMode,
     startsAt: Timestamp.fromMillis(startsAtMillis),
     endsAt: Timestamp.fromMillis(endsAtMillis),
     active: true,
@@ -812,7 +883,18 @@ export const createQrCampaign = onCall(callableOptions, async (request) => {
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return {id: campaignId, title, category, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis, active: true, ...await campaignQr(campaignId)};
+  return {
+    id: campaignId,
+    title,
+    category,
+    description,
+    points,
+    redemptionMode,
+    startsAt: startsAtMillis,
+    endsAt: endsAtMillis,
+    active: true,
+    ...await campaignQr(campaignId),
+  };
 });
 
 export const updateQrCampaign = onCall(callableOptions, async (request) => {
@@ -822,6 +904,8 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
   const requestedCategory = request.data?.category === undefined ? null : qrCampaignCategory(request.data.category);
   const description = requiredPreservedText(request.data?.description, "活動內文", 2000);
   const points = nonZeroInteger(request.data?.points, "活動點數", 100);
+  const requestedRedemptionMode = request.data?.redemptionMode === undefined ? null :
+    qrRedemptionMode(request.data.redemptionMode, points);
   const startsAtMillis = timestampMillis(request.data?.startsAt, "開始時間");
   const endsAtMillis = timestampMillis(request.data?.endsAt, "結束時間");
   if (endsAtMillis <= startsAtMillis) {
@@ -834,20 +918,26 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
     .limit(1)
     .get();
   const auditRef = db.collection("adminAuditLogs").doc();
-  const category = await db.runTransaction(async (transaction) => {
+  const updatedCampaign = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(campaignRef);
     if (!snapshot.exists) throw new HttpsError("not-found", "找不到這個活動");
     const campaign = snapshot.data()!;
     const category = requestedCategory ?? storedQrCampaignCategory(campaign.category);
+    const currentRedemptionMode = storedQrRedemptionMode(campaign.redemptionMode, campaign.points);
+    const redemptionMode = requestedRedemptionMode ?? qrRedemptionMode(undefined, points);
     const hasRedemptions = numberOrZero(campaign.redemptionCount) > 0 || !legacyRedemption.empty;
     if (numberOrZero(campaign.points) !== points && hasRedemptions) {
       throw new HttpsError("failed-precondition", "已有使用者兌換此活動，無法修改活動點數");
+    }
+    if (currentRedemptionMode !== redemptionMode && hasRedemptions) {
+      throw new HttpsError("failed-precondition", "已有使用紀錄，無法修改 QR code 使用方式");
     }
     transaction.update(campaignRef, {
       title,
       category,
       description,
       points,
+      redemptionMode,
       startsAt: Timestamp.fromMillis(startsAtMillis),
       endsAt: Timestamp.fromMillis(endsAtMillis),
       updatedAt: FieldValue.serverTimestamp(),
@@ -861,10 +951,19 @@ export const updateQrCampaign = onCall(callableOptions, async (request) => {
       title,
       createdAt: FieldValue.serverTimestamp(),
     });
-    return category;
+    return {category, redemptionMode};
   });
 
-  return {id: campaignId, title, category, description, points, startsAt: startsAtMillis, endsAt: endsAtMillis};
+  return {
+    id: campaignId,
+    title,
+    category: updatedCampaign.category,
+    description,
+    points,
+    redemptionMode: updatedCampaign.redemptionMode,
+    startsAt: startsAtMillis,
+    endsAt: endsAtMillis,
+  };
 });
 
 export const listQrCampaigns = onCall(callableOptions, async (request) => {
@@ -878,6 +977,7 @@ export const listQrCampaigns = onCall(callableOptions, async (request) => {
       category: storedQrCampaignCategory(data.category),
       description: typeof data.description === "string" ? data.description : "",
       points: data.points,
+      redemptionMode: storedQrRedemptionMode(data.redemptionMode, data.points),
       active: data.active === true,
       redemptionCount: numberOrZero(data.redemptionCount),
       startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
@@ -906,10 +1006,12 @@ export const listPublicQrCampaigns = onCall(callableOptions, async (request) => 
       category: storedQrCampaignCategory(data.category),
       description: typeof data.description === "string" ? data.description : "",
       points: numberOrZero(data.points),
+      redemptionMode: storedQrRedemptionMode(data.redemptionMode, data.points),
       active: data.active === true,
       startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,
       endsAt: data.endsAt instanceof Timestamp ? data.endsAt.toMillis() : null,
-      redeemed: redeemedCampaignIds.has(item.id),
+      redeemed: storedQrRedemptionMode(data.redemptionMode, data.points) === "earn_once" &&
+        redeemedCampaignIds.has(item.id),
     };
   }).filter((campaign) => campaign.active);
 });
@@ -930,6 +1032,7 @@ export const getQrCampaign = onCall(callableOptions, async (request) => {
     category: storedQrCampaignCategory(data.category),
     description: typeof data.description === "string" ? data.description : "",
     points: data.points,
+    redemptionMode: storedQrRedemptionMode(data.redemptionMode, data.points),
     active: data.active === true,
     hasRedemptions: numberOrZero(data.redemptionCount) > 0 || !redemptionSnapshot.empty,
     startsAt: data.startsAt instanceof Timestamp ? data.startsAt.toMillis() : null,

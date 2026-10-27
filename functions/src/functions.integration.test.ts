@@ -190,30 +190,72 @@ describe("QR code 交易", () => {
 
     const deductionCampaignId = "c".repeat(36);
     await seedCampaign(deductionCampaignId, -5);
-    const deducted = (await client.redeemQr({campaignId: deductionCampaignId})).data as {
+    const firstRequestId = "11111111-1111-4111-8111-111111111111";
+    const secondRequestId = "22222222-2222-4222-8222-222222222222";
+    const deducted = (await client.redeemQr({
+      campaignId: deductionCampaignId,
+      requestId: firstRequestId,
+    })).data as {
       points: number;
       totalPoints: number;
       delta: number;
+      title: string;
+      replayed: boolean;
     };
     assert.deepEqual(deducted, {
       points: 15,
       totalPoints: 20,
       delta: -5,
       title: "整合測試活動",
+      replayed: false,
     });
+    const replayed = (await client.redeemQr({
+      campaignId: deductionCampaignId,
+      requestId: firstRequestId,
+    })).data as {points: number; replayed: boolean};
+    assert.equal(replayed.points, 15);
+    assert.equal(replayed.replayed, true);
+
+    await assert.rejects(() => client.redeemQr({
+      campaignId: deductionCampaignId,
+      requestId: secondRequestId,
+    }), (error: {code?: string}) => error.code === "functions/failed-precondition");
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `usersPrivate/${uid}/qrCampaignState/${deductionCampaignId}`), {
+        lastUsedAt: Timestamp.fromMillis(Date.now() - 6000),
+      }, {merge: true});
+    });
+    const deductedAgain = (await client.redeemQr({
+      campaignId: deductionCampaignId,
+      requestId: secondRequestId,
+    })).data as {points: number; totalPoints: number; replayed: boolean};
+    assert.equal(deductedAgain.points, 10);
+    assert.equal(deductedAgain.totalPoints, 20);
+    assert.equal(deductedAgain.replayed, false);
+
     const history = (await client.getPointHistory()).data as Array<{delta: number; type: string}>;
-    assert.equal(history[0]?.delta, -5);
-    assert.equal(history[0]?.type, "qr");
+    assert.equal(history.filter((item) => item.delta === -5 && item.type === "qr").length, 2);
+    const publicCampaigns = (await client.listPublicQrCampaigns()).data as Array<{
+      id: string;
+      redeemed: boolean;
+      redemptionMode: string;
+    }>;
+    const publicDeduction = publicCampaigns.find((campaign) => campaign.id === deductionCampaignId);
+    assert.equal(publicDeduction?.redeemed, false);
+    assert.equal(publicDeduction?.redemptionMode, "deduct_repeatable");
 
     const insufficientCampaignId = "d".repeat(36);
-    await seedCampaign(insufficientCampaignId, -16);
+    await seedCampaign(insufficientCampaignId, -11);
     await assert.rejects(
-      () => client.redeemQr({campaignId: insufficientCampaignId}),
+      () => client.redeemQr({
+        campaignId: insufficientCampaignId,
+        requestId: "33333333-3333-4333-8333-333333333333",
+      }),
       (error: {code?: string}) => error.code === "functions/failed-precondition",
     );
     const database = testEnvironment.authenticatedContext(uid).firestore();
     const profile = await assertSucceeds(getDoc(doc(database, `users/${uid}`)));
-    assert.equal(profile.data()?.points, 15);
+    assert.equal(profile.data()?.points, 10);
     assert.equal(profile.data()?.totalPoints, 20);
   });
 });
@@ -414,16 +456,21 @@ describe("管理員 QR code 管理", () => {
       category: "in_person",
       description: "掃描後扣除活動保證金",
       points: -6,
+      redemptionMode: "deduct_repeatable",
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
     });
-    assert.equal((created.data as {points: number}).points, -6);
+    assert.deepEqual({
+      points: (created.data as {points: number}).points,
+      redemptionMode: (created.data as {redemptionMode: string}).redemptionMode,
+    }, {points: -6, redemptionMode: "deduct_repeatable"});
 
     await assert.rejects(() => admin.createQrCampaign({
       title: "零點活動",
       category: "in_person",
       description: "不應建立",
       points: 0,
+      redemptionMode: "earn_once",
       startsAt: Date.now() - 60_000,
       endsAt: Date.now() + 60_000,
     }), (error: {code?: string}) => error.code === "functions/invalid-argument");

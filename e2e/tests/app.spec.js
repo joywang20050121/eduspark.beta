@@ -595,6 +595,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
                 category: 'interactive',
                 description: '活動說明',
                 points: 5,
+                redemptionMode: 'earn_once',
                 active: true,
                 hasRedemptions: true,
                 startsAt: Date.now() - 60_000,
@@ -621,8 +622,11 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     await expect(campaignDialog.locator('#admin-campaign-category option')).toHaveText([
         '請選擇活動類別', '每日打卡', '實體活動', '互動展覽', '限定活動'
     ]);
-    await expect(campaignDialog.locator('#admin-campaign-points')).toHaveAttribute('min', '-100');
-    await expect(campaignDialog).toContainText('正數為加點，負數為扣點；不可輸入 0。');
+    await expect(campaignDialog.locator('#admin-campaign-mode option')).toHaveText([
+        '一次性加點', '可重複扣點'
+    ]);
+    await expect(campaignDialog.locator('#admin-campaign-points')).toHaveAttribute('min', '1');
+    await expect(campaignDialog).toContainText('請輸入 1 至 100；系統會依使用方式加點或扣點。');
     await campaignDialog.getByRole('button', {name: '關閉', exact: true}).click();
     await expect(page.locator('#download-qr')).toHaveText('下載 PNG');
     await expect(page.locator('#admin-wish-filter')).toHaveCSS('min-width', '118px');
@@ -634,6 +638,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
         category: 'interactive',
         description: '活動說明',
         points: 5,
+        redemptionMode: 'earn_once',
         active: true,
         startsAt: Date.now() - 60_000,
         endsAt: Date.now() + 60_000
@@ -641,6 +646,7 @@ test('後台 QR code 與公佈欄預設顯示列表並以視窗新增', async ({
     await page.getByRole('button', {name: '編輯'}).click();
     const editDialog = page.getByRole('dialog', {name: '編輯活動'});
     await expect(editDialog).toBeVisible();
+    await expect(editDialog.locator('#admin-campaign-mode')).toBeDisabled();
     await expect(editDialog.locator('#admin-campaign-points')).toBeDisabled();
     await expect(editDialog.locator('#admin-campaign-category')).toHaveValue('interactive');
     await expect(editDialog).toContainText('已有使用者兌換，活動點數不能修改。');

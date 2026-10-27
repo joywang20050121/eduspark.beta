@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="/spark2.png">
     <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css?v=33">
-    <link rel="stylesheet" href="/admin/admin.css?v=10">
+    <link rel="stylesheet" href="/admin/admin.css?v=11">
 </head>
 <body class="admin-page">
     <div id="toast" role="status" aria-live="polite">提示訊息</div>
@@ -149,6 +149,8 @@
                     <h2>使用者列表</h2>
                 </div>
                 <div class="admin-header-actions">
+                    <button id="select-all-admin-users" class="admin-secondary-button">全選所有使用者</button>
+                    <button id="export-selected-admin-users" class="admin-secondary-button" disabled>匯出已勾選 CSV</button>
                     <button id="open-point-adjustment" class="admin-primary-button" disabled>調整積分</button>
                 </div>
             </div>
@@ -281,6 +283,6 @@
         </main>
     </div>
 
-    <script type="module" src="/admin/admin.js?v=15"></script>
+    <script type="module" src="/admin/admin.js?v=16"></script>
 </body>
 </html>

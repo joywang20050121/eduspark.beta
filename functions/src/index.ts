@@ -978,6 +978,10 @@ export const listUsers = onCall(callableOptions, async (request) => {
     throw new HttpsError("invalid-argument", "頁碼格式不正確");
   }
   const pageSize = 10;
+  if (request.data?.all !== undefined && typeof request.data.all !== "boolean") {
+    throw new HttpsError("invalid-argument", "全選格式不正確");
+  }
+  const includeAll = request.data?.all === true;
   const rawQueries = request.data?.queries;
   if (rawQueries !== undefined && !Array.isArray(rawQueries)) {
     throw new HttpsError("invalid-argument", "查詢條件格式不正確");
@@ -1032,7 +1036,7 @@ export const listUsers = onCall(callableOptions, async (request) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const offset = (pageNumber - 1) * pageSize;
   return {
-    users: sortedUsers.slice(offset, offset + pageSize),
+    users: includeAll ? sortedUsers : sortedUsers.slice(offset, offset + pageSize),
     total,
     page: pageNumber,
     pageSize,

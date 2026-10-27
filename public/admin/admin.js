@@ -83,8 +83,11 @@ let authorizationInProgress = false;
 let adminUsers = [];
 let adminUserPage = 1;
 let adminUserTotalPages = 1;
+let adminUserTotal = 0;
+let adminUserQuery = "";
 let adminWishes = [];
 const selectedPointUserIds = new Set();
+const selectedAdminUsers = new Map();
 const announcementContentMaxLength = 1100;
 let toastTimeout;
 
@@ -466,17 +469,20 @@ window.renderAdminUsers = (result, query = "") => {
     adminUsers = Array.isArray(response.users) ? response.users : [];
     adminUserPage = Number(response.page) || 1;
     adminUserTotalPages = Math.max(1, Number(response.totalPages) || 1);
+    adminUserTotal = Number(response.total) || 0;
+    adminUsers.forEach((user) => {
+        if (selectedPointUserIds.has(user.uid)) selectedAdminUsers.set(user.uid, user);
+    });
     const pagination = document.getElementById("admin-user-pagination");
     pagination.hidden = Number(response.total) === 0;
-    document.getElementById("admin-user-page-summary").textContent = `第 ${adminUserPage}／${adminUserTotalPages} 頁，共 ${Number(response.total) || 0} 位使用者`;
+    document.getElementById("admin-user-page-summary").textContent = `第 ${adminUserPage}／${adminUserTotalPages} 頁，共 ${adminUserTotal} 位使用者`;
     document.getElementById("previous-admin-user-page").disabled = adminUserPage <= 1;
     document.getElementById("next-admin-user-page").disabled = adminUserPage >= adminUserTotalPages;
-    selectedPointUserIds.clear();
     updateSelectedUserCount();
     list.innerHTML = adminUsers.length ? adminUsers.map((user) => `
             <div class="admin-user-row" data-uid="${escapeHtml(user.uid)}">
                 <label class="admin-user-select" title="${user.realName ? "選擇使用者" : "尚未建立個人檔案"}">
-                    <input class="point-user-checkbox" type="checkbox" aria-label="選擇 ${escapeHtml(user.realName || user.email)}" ${user.realName ? "" : "disabled"}>
+                    <input class="point-user-checkbox" type="checkbox" aria-label="選擇 ${escapeHtml(user.realName || user.email)}" ${selectedPointUserIds.has(user.uid) ? "checked" : ""}>
                 </label>
                 <button type="button" class="admin-user-row-content view-user-detail" aria-label="查看 ${escapeHtml(user.realName || user.nickname || user.email)} 的詳細資料">
                     <span class="admin-user-name"><strong>${escapeHtml(user.realName || user.nickname || user.displayName || "尚未建立檔案")}</strong><small>${escapeHtml(user.nickname || "")}</small></span>
@@ -493,7 +499,14 @@ window.renderAdminUsers = (result, query = "") => {
     list.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
         checkbox.addEventListener("change", () => {
             const uid = checkbox.closest("[data-uid]").dataset.uid;
-            if (checkbox.checked) selectedPointUserIds.add(uid); else selectedPointUserIds.delete(uid);
+            const user = adminUsers.find((item) => item.uid === uid);
+            if (checkbox.checked && user) {
+                selectedPointUserIds.add(uid);
+                selectedAdminUsers.set(uid, user);
+            } else {
+                selectedPointUserIds.delete(uid);
+                selectedAdminUsers.delete(uid);
+            }
             updateSelectedUserCount();
         });
     });
@@ -512,6 +525,11 @@ const loadAdminUsers = async (query = document.getElementById("admin-user-query"
         if (queries.length > 20) {
             throw new Error("一次最多查詢 20 位使用者");
         }
+        if (query !== adminUserQuery) {
+            selectedPointUserIds.clear();
+            selectedAdminUsers.clear();
+            adminUserQuery = query;
+        }
         const response = await callListUsers({queries, page});
         window.renderAdminUsers(response.data, query);
     } catch (error) {
@@ -525,6 +543,45 @@ const updateSelectedUserCount = () => {
     const modalCount = document.getElementById("point-adjustment-selection");
     if (modalCount) modalCount.textContent = `已選擇 ${selectedPointUserIds.size} 位使用者`;
     document.getElementById("open-point-adjustment").disabled = selectedPointUserIds.size === 0;
+    document.getElementById("export-selected-admin-users").disabled = selectedPointUserIds.size === 0;
+    const selectAll = document.getElementById("select-all-admin-users");
+    const allSelected = adminUserTotal > 0 && selectedPointUserIds.size === adminUserTotal;
+    selectAll.textContent = allSelected ? "取消全選" : "全選所有使用者";
+    selectAll.disabled = adminUserTotal === 0;
+};
+
+const csvCell = (value) => {
+    let text = String(value ?? "");
+    if (typeof value === "string" && /^\s*[=+\-@]/u.test(text)) text = `'${text}`;
+    return `"${text.replaceAll('"', '""')}"`;
+};
+
+const exportSelectedAdminUsers = () => {
+    const headers = ["UID", "真實姓名", "公開暱稱", "Email", "系級", "目前點數", "累積點數", "權限", "帳號狀態", "建立時間", "最近登入"];
+    const rows = [...selectedAdminUsers.values()]
+        .sort((a, b) => String(a.email || "").localeCompare(String(b.email || ""), "zh-TW"))
+        .map((user) => [
+            user.uid,
+            user.realName,
+            user.nickname,
+            user.email,
+            user.dept,
+            Number(user.points || 0),
+            Number(user.totalPoints || 0),
+            user.isSuperAdmin ? "初始管理員" : user.isAdmin ? "管理員" : "一般使用者",
+            user.disabled ? "已停用" : "正常",
+            formatCampaignTime(user.createdAt),
+            formatCampaignTime(user.lastSignInAt)
+        ]);
+    const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+    const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `eduspark-users-${new Date().toLocaleDateString("sv-SE", {timeZone: "Asia/Taipei"})}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
 };
 
 const showUserDetail = async (uid) => {
@@ -600,6 +657,42 @@ document.getElementById("clear-admin-user-search").addEventListener("click", () 
     document.getElementById("admin-user-query").value = "";
     loadAdminUsers("", 1);
 });
+
+document.getElementById("select-all-admin-users").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (adminUserTotal > 0 && selectedPointUserIds.size === adminUserTotal) {
+        selectedPointUserIds.clear();
+        selectedAdminUsers.clear();
+        document.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
+            checkbox.checked = false;
+        });
+        updateSelectedUserCount();
+        return;
+    }
+    button.disabled = true;
+    try {
+        const queries = adminUserSearchTerms(adminUserQuery);
+        const users = adminUsers.length === adminUserTotal
+            ? adminUsers
+            : ((await callListUsers({queries, page: 1, all: true})).data?.users || []);
+        selectedPointUserIds.clear();
+        selectedAdminUsers.clear();
+        users.forEach((user) => {
+            selectedPointUserIds.add(user.uid);
+            selectedAdminUsers.set(user.uid, user);
+        });
+        document.querySelectorAll(".point-user-checkbox").forEach((checkbox) => {
+            checkbox.checked = selectedPointUserIds.has(checkbox.closest("[data-uid]").dataset.uid);
+        });
+        updateSelectedUserCount();
+    } catch (error) {
+        showToast(callableErrorMessage(error, "全選使用者失敗"));
+    } finally {
+        button.disabled = false;
+    }
+});
+
+document.getElementById("export-selected-admin-users").addEventListener("click", exportSelectedAdminUsers);
 
 document.getElementById("previous-admin-user-page").addEventListener("click", () => {
     if (adminUserPage > 1) loadAdminUsers(undefined, adminUserPage - 1);

@@ -660,20 +660,28 @@ test('後台使用者頁以查詢列表與積分調整視窗呈現', async ({pag
             isSuperAdmin: false,
             disabled: false,
             lastSignInAt: Date.now()
-        }], total: 21, page: 1, pageSize: 10, totalPages: 3});
+        }], total: 1, page: 1, pageSize: 10, totalPages: 1});
     });
 
     await expect(page.locator('#admin-user-query')).toHaveAttribute('placeholder', '輸入 Email、姓名或暱稱，每行一位');
     await expect(page.locator('.admin-user-row')).toHaveCount(1);
-    await expect(page.locator('#admin-user-page-summary')).toHaveText('第 1／3 頁，共 21 位使用者');
+    await expect(page.locator('#admin-user-page-summary')).toHaveText('第 1／1 頁，共 1 位使用者');
     await expect(page.locator('#previous-admin-user-page')).toBeDisabled();
-    await expect(page.locator('#next-admin-user-page')).toBeEnabled();
+    await expect(page.locator('#next-admin-user-page')).toBeDisabled();
     await page.locator('.admin-user-row-content').hover();
     await expect(page.locator('.admin-user-row-content')).toHaveCSS('transform', 'none');
     await expect(page.locator('.point-user-checkbox')).toBeVisible();
     await expect(page.locator('#open-point-adjustment')).toBeDisabled();
+    await expect(page.locator('#export-selected-admin-users')).toBeDisabled();
     await expect(page.locator('#batch-points')).toHaveAttribute('min', '-1000');
-    await page.locator('.point-user-checkbox').check();
+    await page.locator('#select-all-admin-users').click();
+    await expect(page.locator('.point-user-checkbox')).toBeChecked();
+    await expect(page.locator('#selected-user-count')).toHaveText('已選擇 1 位使用者');
+    await expect(page.locator('#select-all-admin-users')).toHaveText('取消全選');
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#export-selected-admin-users').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^eduspark-users-\d{4}-\d{2}-\d{2}\.csv$/u);
     await page.locator('#open-point-adjustment').click();
     await expect(page.getByRole('dialog', {name: '調整積分'})).toBeVisible();
     await page.getByRole('dialog', {name: '調整積分'}).getByRole('button', {name: '關閉', exact: true}).click();

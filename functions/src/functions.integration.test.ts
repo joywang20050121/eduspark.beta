@@ -636,6 +636,14 @@ describe("積分管理", () => {
       first.auth.currentUser!.uid,
       second.auth.currentUser!.uid,
     ]));
+
+    const allUsers = (await admin.listUsers({all: true})).data as {
+      users: Array<{uid: string}>;
+      total: number;
+      pageSize: number;
+    };
+    assert.equal(allUsers.users.length, allUsers.total);
+    assert.ok(allUsers.total > allUsers.pageSize);
   });
 
   test("一般使用者不能批次加點", async () => {

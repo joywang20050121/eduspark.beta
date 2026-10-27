@@ -14,7 +14,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Checkout repository
@@ -99,44 +99,32 @@ jobs:
 
       - name: Deploy Functions batch 1
         run: >-
-          ./functions/node_modules/.bin/firebase deploy
-          --project coespark-a3f6e
-          --only
-          functions:getMyProfile,functions:bootstrapSuperAdmin,functions:saveProfile,functions:createWish,functions:listWishes,functions:deleteWish
-          --non-interactive
+          node scripts/deploy-functions-with-retry.mjs
+          getMyProfile,bootstrapSuperAdmin,saveProfile,createWish,listWishes,deleteWish
 
       - name: Allow previous revisions to scale down
         run: sleep 60
 
       - name: Deploy Functions batch 2
         run: >-
-          ./functions/node_modules/.bin/firebase deploy
-          --project coespark-a3f6e
-          --only
-          functions:listPublishedAnnouncements,functions:listAnnouncements,functions:saveAnnouncement,functions:deleteAnnouncement,functions:redeemReward,functions:redeemQr
-          --non-interactive
+          node scripts/deploy-functions-with-retry.mjs
+          listPublishedAnnouncements,listAnnouncements,saveAnnouncement,deleteAnnouncement,redeemReward,redeemQr
 
       - name: Allow previous revisions to scale down
         run: sleep 60
 
       - name: Deploy Functions batch 3
         run: >-
-          ./functions/node_modules/.bin/firebase deploy
-          --project coespark-a3f6e
-          --only
-          functions:createQrCampaign,functions:updateQrCampaign,functions:listQrCampaigns,functions:listPublicQrCampaigns,functions:getQrCampaign,functions:setQrCampaignStatus,functions:lookupAdminUser
-          --non-interactive
+          node scripts/deploy-functions-with-retry.mjs
+          createQrCampaign,updateQrCampaign,listQrCampaigns,listPublicQrCampaigns,getQrCampaign,setQrCampaignStatus,lookupAdminUser
 
       - name: Allow previous revisions to scale down
         run: sleep 60
 
       - name: Deploy Functions batch 4
         run: >-
-          ./functions/node_modules/.bin/firebase deploy
-          --project coespark-a3f6e
-          --only
-          functions:listAdminUsers,functions:listUsers,functions:batchAddPoints,functions:getDailyCheckIns,functions:submitDailyCheckIn,functions:getPointHistory,functions:getUserPointHistory,functions:setAdminRole
-          --non-interactive
+          node scripts/deploy-functions-with-retry.mjs
+          listAdminUsers,listUsers,batchAddPoints,getDailyCheckIns,submitDailyCheckIn,getPointHistory,getUserPointHistory,setAdminRole
 
       - name: Verify production site
         run: >-
